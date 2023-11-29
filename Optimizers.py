@@ -7,39 +7,88 @@ from model import *
 import numpy as np
 
 
-class Sharp(Optimizer):
-    def __init__(self, params, alpha, eta, T=100):
-        super(Sharp, self).__init__(params, dict())
-        self.f = None
-        self.alpha = alpha
-        self.eta = eta
-        self.count = 0
-        self.T = T
-        self.v = None
-        self.x_prev = None
 
-    def set_f(self, f):
-        self.f = f
 
-    def step(self, **kwargs):
-        alpha = self.alpha / (self.count // self.T + 1) ** (2 / 3)
-        eta = self.eta / (self.count // self.T + 1) ** (2 / 3)
 
-        if self.v is None:
-            self.v = [p.grad for name in self.param_groups for p in name["params"]]
-        else:
-            b = torch.rand(1).cuda()
-            x = [p for name in self.param_groups for p in name["params"]]
-            a = [b * x1 + (1 - b) * x2 for x1, x2 in zip(x, self.x_prev)]
-            h = hvp(self.f, tuple(a), tuple((x1 - x2) for x1, x2 in zip(x, self.x_prev)))[1]
-            g = [p.grad for name in self.param_groups for p in name["params"]]
-            self.v = [(1 - alpha) * (v1 + h1) + alpha * g1 for v1, h1, g1 in zip(self.v, h, g)]
 
-        self.x_prev = [p.clone() for name in self.param_groups for p in name["params"]]
+##################
+##  First Order ##
+##################
+class StormOptimizer(Optimizer):
+    # Storing the parameters required in defaults dictionary
+    # lr-->learning rate
+    # c-->parameter to be swept over logarithmically spaced grid as per paper
+    # w and k to be set as 0.1 as per paper
+    # momentum-->dictionary storing model params as keys and their momentum term as values
+    #            at each iteration(denoted by 'd' in paper)
+    # gradient--> dictionary storing model params as keys and their gradients till now in a list as values
+    #            (denoted by '∇f(x,ε)' in paper)
+    # sqrgradnorm-->dictionary storing model params as keys and their sum of norm ofgradients till now
+    #             as values(denoted by '∑G^2' in paper)
+
+    def __init__(self, params, lr=0.1, c=100, momentum={}, gradient={}, sqrgradnorm={}):
+        defaults = dict(lr=lr, c=c, momentum=momentum, sqrgradnorm=sqrgradnorm, gradient=gradient)
+        super(StormOptimizer, self).__init__(params, defaults)
+
+    # Returns the state of the optimizer as a dictionary containing state and param_groups as keys
+    def __setstate__(self, state):
+        super(StormOptimizer, self).__setstate__(state)
+
+    # Performs a single optimization step for parameter updates
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            loss = closure()
+
+        # param_groups-->a dict containing all parameter groups
         for group in self.param_groups:
-            for p,v in zip(group["params"],self.v):
-                p.data -= eta*v/torch.norm(v)
-        self.count += 1
+            # Retrieving from defaults dictionary
+            learn_rate = group['lr']
+            factor = group['c']
+            momentum = group['momentum']
+            gradient = group['gradient']
+            sqrgradnorm = group['sqrgradnorm']
+
+            # Update step for each parameter present in param_groups
+            for p in group['params']:
+                # Calculating gradient('∇f(x,ε)' in paper)
+                if p.grad is None:
+                    continue
+                dp = p.grad.data
+
+                # Storing all gradients in a list
+                if p in gradient:
+                    gradient[p].append(dp)
+                else:
+                    gradient.update({p: [dp]})
+
+                # Calculating and storing ∑G^2in sqrgradnorm
+                if p in sqrgradnorm:
+                    sqrgradnorm[p] = sqrgradnorm[p] + torch.pow(torch.norm(dp), 2)
+                else:
+                    sqrgradnorm.update({p: torch.pow(torch.norm(dp), 2)})
+
+                # Updating learning rate('η' in paper)
+                power = 1.0 / 3.0
+                scaling = torch.pow((0.1 + sqrgradnorm[p]), power)
+                learn_rate = learn_rate / (float)(scaling)
+
+                # Calculating 'a' mentioned as a=cη^2 in paper(denoted 'c' as factor here)
+                a = min(factor * learn_rate ** 2.0, 1.0)
+
+                # Calculating and storing the momentum term(d'=∇f(x',ε')+(1-a')(d-∇f(x,ε')))
+                if p in momentum:
+                    momentum[p] = gradient[p][-1] + (1 - a) * (momentum[p] - gradient[p][-2])
+                else:
+                    momentum.update({p: dp})
+
+                # Updation of model parameter p
+                p.data = p.data - learn_rate * momentum[p]
+                learn_rate = group['lr']
+
+        return loss
+
+
 
 
 class Adaptive_SGD(Optimizer):
@@ -55,6 +104,55 @@ class Adaptive_SGD(Optimizer):
         for group in self.param_groups:
             for p in group["params"]:
                 p.data -= lr * p.grad
+        self.count += 1
+
+
+
+
+##################
+## Second Order ##
+##################
+class Sharp(Optimizer):
+    def __init__(self, params, alpha, eta, T=100):
+        super(Sharp, self).__init__(params, dict())
+        self.f = None
+        self.alpha = alpha
+        self.eta = eta
+        self.count = 0
+        self.T = T
+        self.v = None
+        self.x_prev = None
+
+    def set_f(self, f):
+        self.f = f
+
+    def step(self, **kwargs):
+        # αt ← α0/t^{2/3}
+        alpha = self.alpha / (self.count // self.T + 1) ** (2 / 3)
+        # ηt ← η0/t^{2/3}
+        eta = self.eta / (self.count // self.T + 1) ** (2 / 3)
+
+        if self.v is None:
+            # v0 ← g(τ0; θ0)
+            self.v = [p.grad for name in self.param_groups for p in name["params"]]
+        else:
+            # Sample bt ∼ U(0, 1)
+            b = torch.rand(1).cuda()
+            x = [p for name in self.param_groups for p in name["params"]]
+            # θb0 ← bt θt + (1 − bt)θt−1
+            a = [b * x1 + (1 - b) * x2 for x1, x2 in zip(x, self.x_prev)]
+
+            # B(τbt; θbt) (θ^t − θt−1)
+            h = hvp(self.f, tuple(a), tuple((x1 - x2) for x1, x2 in zip(x, self.x_prev)))[1]
+            # g(τt; θt)
+            g = [p.grad for name in self.param_groups for p in name["params"]]
+            #vt ← (1 − αt)(vt−1 + B(τbt; θbt)(θt − θt−1)) 
+            self.v = [(1 - alpha) * (v1 + h1) + alpha * g1 for v1, h1, g1 in zip(self.v, h, g)]
+
+        self.x_prev = [p.clone() for name in self.param_groups for p in name["params"]]
+        for group in self.param_groups:
+            for p,v in zip(group["params"],self.v):
+                p.data -= eta*v/torch.norm(v)
         self.count += 1
 
 
@@ -74,10 +172,12 @@ class HVP_RVR(Optimizer):
         self.eps = eps
         self.lr = lr
         self.mode = None
+        
         if mode == 'SGD':
             self.mode = self.SGD
         elif mode == "SCRN":
             self.mode = self.SCRN
+
         self.adaptive = adaptive
         self.func = func
         self.T = T
@@ -128,7 +228,6 @@ class HVP_RVR(Optimizer):
 
         self.g = self.gradient_estimator(self.parameters, x_prev, self.g, self.b, self.sigma2, self.l2,
                                          self.eps)
-        # print(sum(torch.norm(a) for a in self.g))
 
         for group in self.param_groups:
             for p, delta in zip(group["params"], self.g):
@@ -207,30 +306,63 @@ class SCRN(Optimizer):
             for p, delta in zip(group["params"], deltas):
                 p.data += delta
 
+    # Algorithm 4 Cubic-Subsolver via Gradient Descent
     def cubic_regularization(self, eps, grad):
         g_norm = [torch.norm(g) for g in grad]
         a = sum(g_norm)
         if a >= ((self.l_ ** 2) / self.rho):
+            # B[g]
             hgp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
                       tuple(p.grad for group in self.param_groups for p in group['params']))[1]
+            # (gT B[g]) / (ρ||g||2)
             temp = [g.reshape(-1) @ h.reshape(-1) / self.rho / a.pow(2) for g, h in zip(grad, hgp)]
+
+            # -temp + sqrt(temp^2 + 2 ||g_norm||/ρ)
             R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
+            
+            # ∆ ← −Rc g/||g||
             delta = [-r * g / a for r, g in zip(R_c, grad)]
             self.log.append(('1', a.item(), sum([torch.norm(d) for d in delta]).item()))
         else:
+            # ∆ ← 0, σ ← c sqrt(ρε)/l, mu ← 1/(20l)
             delta = [torch.zeros(g.size()).to(self.device) for g in grad]
             sigma = self.c_ * (eps * self.rho) ** 0.5 / self.l_
             mu = 1.0 / (20.0 * self.l_)
+            # v ← random vector in R^d in uniform distribution
             vec = [(torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device) for g in grad]
             vec = [v / torch.norm(v) for v in vec]
+            # g_ ← g + σv
             g_ = [g + sigma * v for g, v in zip(grad, vec)]
-            for j in range(self.T_eps):
+            for _ in range(self.T_eps):
+
+                # B[∆]
                 hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
                           tuple(delta))[1]
+                # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
                 delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
+
+                
                 # g_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(g_, delta2, hdp)]
                 # d2_norm = [torch.norm(d) for d in g_m]
             self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
+        return delta
+
+
+    def cubic_final(self, eps, grad):
+        # ∆ ← 0, g_m ← g, mu ← 1/(20l)
+        delta = [torch.zeros(g.size()).to(self.device) for g in grad]
+        grad_m = grad
+        mu = 1.0 / (20.0 * self.l_)
+        grad_norm = [torch.norm(g) for g in grad]
+
+        while grad_norm >= eps/2:
+            delta -= mu * grad_m
+
+            hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
+                          tuple(delta))[1]
+            grad_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(grad, delta, hdp)]
+            grad_norm = [torch.norm(g) for g in grad_m]
+        
         return delta
 
     def save_log(self, path='classifier_logs/classifier_logs/', flag_param=False):
@@ -244,29 +376,14 @@ class SCRN(Optimizer):
         f.close()
 
 
-class SCRN_Momentum(Optimizer):
-    def __init__(self, params, momentum=0.9, T_eps=10, l_=1,
-                 rho=1, c_=1, eps=1e-9, device=None):
-        if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        super(SCRN_Momentum, self).__init__(params, dict())
-        self.hes = None
-        self.T_eps = T_eps
-        self.l_ = l_
-        self.rho = rho
-        self.c_ = c_
-        self.eps = eps
-        self.params = params
-        self.f = None
-        self.device = device
-        self.log = []
+class SCRN_Momentum(SCRN):
+    def __init__(self, params, momentum=0.9, T_eps=10, l_=1, rho=1, c_=1, eps=1e-9, device=None):
+        super(SCRN_Momentum, self).__init__(params, T_eps, l_, rho, c_, eps, device)
+        self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
         self.momentum = momentum
-        self.old_delta = [torch.zeros(p.size()).to(device) for group in self.param_groups for p in group['params']]
+        self.old_delta = None
 
-    def set_f(self, f):
-        self.f = f
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
@@ -275,42 +392,6 @@ class SCRN_Momentum(Optimizer):
         for group in self.param_groups:
             for p, delta in zip(group["params"], self.old_delta):
                 p.data += delta
-
-    def cubic_regularization(self, eps, grad):
-        g_norm = [torch.norm(g) for g in grad]
-        a = sum(g_norm)
-        if a >= ((self.l_ ** 2) / self.rho):
-            hgp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
-                      tuple(p.grad for group in self.param_groups for p in group['params']))[1]
-            temp = [g.reshape(-1) @ h.reshape(-1) / self.rho / a.pow(2) for g, h in zip(grad, hgp)]
-            R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
-            delta = [-r * g / a for r, g in zip(R_c, grad)]
-            self.log.append(('1', a.item(), sum([torch.norm(d) for d in delta]).item()))
-        else:
-            delta = [torch.zeros(g.size()).to(self.device) for g in grad]
-            sigma = self.c_ * (eps * self.rho) ** 0.5 / self.l_
-            mu = 1.0 / (20.0 * self.l_)
-            vec = [(torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device) for g in grad]
-            vec = [v / torch.norm(v) for v in vec]
-            g_ = [g + sigma * v for g, v in zip(grad, vec)]
-            for j in range(self.T_eps):
-                hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
-                          tuple(delta))[1]
-                delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
-                # g_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(g_, delta2, hdp)]
-                # d2_norm = [torch.norm(d) for d in g_m]
-            self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
-        return delta
-
-    def save_log(self, path='classifier_logs/classifier_logs/', flag_param=False):
-        if flag_param:
-            name = self.name + "_l_" + str(self.l) + "_rho_" + str(self.rho)
-        else:
-            name = self.name
-        f = open(path + name, 'w')
-        for l in self.log:
-            f.write(str(l) + '\n')
-        f.close()
 
 
 class SVRCRN(Optimizer):
@@ -491,82 +572,6 @@ class SVRC(Optimizer):
         for l in self.log:
             f.write(str(l) + '\n')
         f.close()
-
-
-class StormOptimizer(Optimizer):
-    # Storing the parameters required in defaults dictionary
-    # lr-->learning rate
-    # c-->parameter to be swept over logarithmically spaced grid as per paper
-    # w and k to be set as 0.1 as per paper
-    # momentum-->dictionary storing model params as keys and their momentum term as values
-    #            at each iteration(denoted by 'd' in paper)
-    # gradient--> dictionary storing model params as keys and their gradients till now in a list as values
-    #            (denoted by '∇f(x,ε)' in paper)
-    # sqrgradnorm-->dictionary storing model params as keys and their sum of norm ofgradients till now
-    #             as values(denoted by '∑G^2' in paper)
-
-    def __init__(self, params, lr=0.1, c=100, momentum={}, gradient={}, sqrgradnorm={}):
-        defaults = dict(lr=lr, c=c, momentum=momentum, sqrgradnorm=sqrgradnorm, gradient=gradient)
-        super(StormOptimizer, self).__init__(params, defaults)
-
-    # Returns the state of the optimizer as a dictionary containing state and param_groups as keys
-    def __setstate__(self, state):
-        super(StormOptimizer, self).__setstate__(state)
-
-    # Performs a single optimization step for parameter updates
-    def step(self, closure=None):
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        # param_groups-->a dict containing all parameter groups
-        for group in self.param_groups:
-            # Retrieving from defaults dictionary
-            learn_rate = group['lr']
-            factor = group['c']
-            momentum = group['momentum']
-            gradient = group['gradient']
-            sqrgradnorm = group['sqrgradnorm']
-
-            # Update step for each parameter present in param_groups
-            for p in group['params']:
-                # Calculating gradient('∇f(x,ε)' in paper)
-                if p.grad is None:
-                    continue
-                dp = p.grad.data
-
-                # Storing all gradients in a list
-                if p in gradient:
-                    gradient[p].append(dp)
-                else:
-                    gradient.update({p: [dp]})
-
-                # Calculating and storing ∑G^2in sqrgradnorm
-                if p in sqrgradnorm:
-                    sqrgradnorm[p] = sqrgradnorm[p] + torch.pow(torch.norm(dp), 2)
-                else:
-                    sqrgradnorm.update({p: torch.pow(torch.norm(dp), 2)})
-
-                # Updating learning rate('η' in paper)
-                power = 1.0 / 3.0
-                scaling = torch.pow((0.1 + sqrgradnorm[p]), power)
-                learn_rate = learn_rate / (float)(scaling)
-
-                # Calculating 'a' mentioned as a=cη^2 in paper(denoted 'c' as factor here)
-                a = min(factor * learn_rate ** 2.0, 1.0)
-
-                # Calculating and storing the momentum term(d'=∇f(x',ε')+(1-a')(d-∇f(x,ε')))
-                if p in momentum:
-                    momentum[p] = gradient[p][-1] + (1 - a) * (momentum[p] - gradient[p][-2])
-                else:
-                    momentum.update({p: dp})
-
-                # Updation of model parameter p
-                p.data = p.data - learn_rate * momentum[p]
-                learn_rate = group['lr']
-
-        return loss
-
 
 if __name__ == '__main__':
     pass
