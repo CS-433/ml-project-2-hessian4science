@@ -342,8 +342,6 @@ class SCRN(Optimizer):
                 delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
 
                 
-                # g_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(g_, delta2, hdp)]
-                # d2_norm = [torch.norm(d) for d in g_m]
             self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
         return delta
 
@@ -355,11 +353,13 @@ class SCRN(Optimizer):
         mu = 1.0 / (20.0 * self.l_)
         grad_norm = [torch.norm(g) for g in grad]
 
-        while grad_norm >= eps/2:
+        while torch.sum(grad_norm) >= eps/2:
             delta -= mu * grad_m
 
             hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
                           tuple(delta))[1]
+            
+            # g_m ← g + B[∆] + ρ/2||∆||
             grad_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(grad, delta, hdp)]
             grad_norm = [torch.norm(g) for g in grad_m]
         
