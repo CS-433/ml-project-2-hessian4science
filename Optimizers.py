@@ -112,49 +112,6 @@ class Adaptive_SGD(Optimizer):
 ##################
 ## Second Order ##
 ##################
-class Sharp(Optimizer):
-    def __init__(self, params, alpha, eta, T=100):
-        super(Sharp, self).__init__(params, dict())
-        self.f = None
-        self.alpha = alpha
-        self.eta = eta
-        self.count = 0
-        self.T = T
-        self.v = None
-        self.x_prev = None
-
-    def set_f(self, f):
-        self.f = f
-
-    def step(self, **kwargs):
-        # αt ← α0/t^{2/3}
-        alpha = self.alpha / (self.count // self.T + 1) ** (2 / 3)
-        # ηt ← η0/t^{2/3}
-        eta = self.eta / (self.count // self.T + 1) ** (2 / 3)
-
-        if self.v is None:
-            # v0 ← g(τ0; θ0)
-            self.v = [p.grad for name in self.param_groups for p in name["params"]]
-        else:
-            # Sample bt ∼ U(0, 1)
-            b = torch.rand(1).cuda()
-            x = [p for name in self.param_groups for p in name["params"]]
-            # θb0 ← bt θt + (1 − bt)θt−1
-            a = [b * x1 + (1 - b) * x2 for x1, x2 in zip(x, self.x_prev)]
-
-            # B(τbt; θbt) (θ^t − θt−1)
-            h = hvp(self.f, tuple(a), tuple((x1 - x2) for x1, x2 in zip(x, self.x_prev)))[1]
-            # g(τt; θt)
-            g = [p.grad for name in self.param_groups for p in name["params"]]
-            #vt ← (1 − αt)(vt−1 + B(τbt; θbt)(θt − θt−1)) 
-            self.v = [(1 - alpha) * (v1 + h1) + alpha * g1 for v1, h1, g1 in zip(self.v, h, g)]
-
-        self.x_prev = [p.clone() for name in self.param_groups for p in name["params"]]
-        for group in self.param_groups:
-            for p,v in zip(group["params"],self.v):
-                p.data -= eta*v/torch.norm(v)
-        self.count += 1
-
 
 class HVP_RVR(Optimizer):
     def __init__(self, params, b=0.1,
@@ -301,18 +258,19 @@ class SCRN(Optimizer):
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
-        deltas, detla_m = self.cubic_regularization(self.eps, grad)
+        deltas,  = self.cubic_regularization(self.eps, grad)
 
         for group in self.param_groups:
             for p, delta in zip(group["params"], deltas):
                 p.data += delta
 
-        if detla_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
+        if delta_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
             delta = self.cubic_final(self.eps, grad)
             for group in self.param_groups:
                 for p, delta in zip(group["params"], deltas):
                     p.data += delta
             return True
+        
             
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
     def cubic_regularization(self, eps, grad):
@@ -396,12 +354,18 @@ class SCRN_Momentum(SCRN):
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
-        deltas = self.cubic_regularization(self.eps, grad)
+        deltas, delta_m = self.cubic_regularization(self.eps, grad)
         self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
         for group in self.param_groups:
             for p, delta in zip(group["params"], self.old_delta):
                 p.data += delta
 
+        if delta_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
+            delta = self.cubic_final(self.eps, grad)
+            for group in self.param_groups:
+                for p, delta in zip(group["params"], deltas):
+                    p.data += delta
+            return True
 
 class SVRCRN(Optimizer):
     def __init__(self, params, T_eps=10, l_=1,
