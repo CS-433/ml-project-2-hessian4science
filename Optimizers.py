@@ -301,11 +301,19 @@ class SCRN(Optimizer):
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
-        deltas = self.cubic_regularization(self.eps, grad)
+        deltas, detla_m = self.cubic_regularization(self.eps, grad)
+
         for group in self.param_groups:
             for p, delta in zip(group["params"], deltas):
                 p.data += delta
 
+        if detla_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
+            delta = self.cubic_final(self.eps, grad)
+            for group in self.param_groups:
+                for p, delta in zip(group["params"], deltas):
+                    p.data += delta
+            return True
+            
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
     def cubic_regularization(self, eps, grad):
         g_norm = [torch.norm(g) for g in grad]
@@ -341,9 +349,11 @@ class SCRN(Optimizer):
                 # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
                 delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
 
+        detla_m = grad * delta + 1/2 * delta.T * hdp + self.rho/6 * torch.pow(torch.norm(delta),3)
                 
-            self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
-        return delta
+        self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
+        
+        return delta, detla_m
 
 
     def cubic_final(self, eps, grad):
@@ -362,7 +372,6 @@ class SCRN(Optimizer):
             # g_m ← g + B[∆] + ρ/2||∆||
             grad_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(grad, delta, hdp)]
             grad_norm = [torch.norm(g) for g in grad_m]
-        
         return delta
 
     def save_log(self, path='classifier_logs/classifier_logs/', flag_param=False):
