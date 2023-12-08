@@ -2,8 +2,6 @@ from torch import nn
 from torch.autograd.functional import hessian, hvp
 from torch.optim import Optimizer
 import torch
-from torch.nn.utils import stateless
-from model import *
 import numpy as np
 
 
