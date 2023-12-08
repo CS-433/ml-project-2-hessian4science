@@ -65,8 +65,8 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     if args.criterion == "cross_entropy":
         criterion = torch.nn.functional.cross_entropy
