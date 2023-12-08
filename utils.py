@@ -64,7 +64,7 @@ def train_epoch(model, optimizer, scheduler, criterion, train_loader, epoch, dev
     return loss_history, accuracy_history, lr_history
 
 
-def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", plot=False, verbose=True):
+def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", plot=True, verbose=True):
     model = model.to(device=device)
     criterion = torch.nn.functional.cross_entropy
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -99,31 +99,31 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", p
 
     # ===== Plot training curves =====
     if plot:
-        if plot:
-            n_train = len(train_acc_history)
-            t_train = epochs * np.arange(n_train) / n_train
-            t_val = np.arange(1, epochs + 1)
+        n_train = len(train_acc_history)
+        t_train = epochs * np.arange(n_train) / n_train
+        t_val = np.arange(1, epochs + 1)
 
-            plt.figure(figsize=(6.4 * 3, 4.8))
-            plt.subplot(1, 3, 1)
-            plt.plot(t_train, train_acc_history, label="Train")
-            plt.plot(t_val, val_acc_history, label="Val")
-            plt.legend()
-            plt.xlabel("Epoch")
-            plt.ylabel("Accuracy")
+        plt.figure(figsize=(6.4 * 3, 4.8))
+        plt.subplot(1, 3, 1)
+        plt.plot(t_train, train_acc_history, label="Train")
+        plt.plot(t_val, val_acc_history, label="Val")
+        plt.legend()
+        plt.xlabel("Epoch")
+        plt.ylabel("Accuracy")
 
-            plt.subplot(1, 3, 2)
-            plt.plot(t_train, train_loss_history, label="Train")
-            plt.plot(t_val, val_loss_history, label="Val")
-            plt.legend()
-            plt.xlabel("Epoch")
-            plt.ylabel("Loss")
+        plt.subplot(1, 3, 2)
+        plt.plot(t_train, train_loss_history, label="Train")
+        plt.plot(t_val, val_loss_history, label="Val")
+        plt.legend()
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
 
-            plt.subplot(1, 3, 3)
-            plt.plot(t_train, lr_history)
-            plt.xlabel("Epoch")
-            plt.ylabel("Learning Rate")
+        plt.subplot(1, 3, 3)
+        plt.plot(t_train, lr_history)
+        plt.xlabel("Epoch")
+        plt.ylabel("Learning Rate")
 
-            plt.savefig('training_curves.png')
+        plt.savefig('training_curves.png')
+        plt.close()
 
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
