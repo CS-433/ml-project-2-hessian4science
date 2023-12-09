@@ -262,15 +262,15 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_eps=10, l_=1,
+    def __init__(self, params, T_eps=10, lr=0.05,
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+        defaults = dict(T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
         self.hes = None
         self.T_eps = T_eps
-        self.l_ = l_
+        self.l_ = 1 / (20 * lr)
         self.rho = rho
         self.c_ = c_
         self.eps = eps
@@ -370,8 +370,8 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, momentum=0.9, T_eps=10, l_=1, rho=1, c_=1, eps=1e-9):
-        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+    def __init__(self, params, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+        defaults = dict(T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN_Momentum, self).__init__(params, defaults)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
@@ -398,15 +398,15 @@ class SCRN_Momentum(SCRN):
 
 
 class SVRCRN(COptimizer):
-    def __init__(self, params, T_eps=10, l_=1,
+    def __init__(self, params, T_eps=10, lr=0.05,
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+        defaults = dict(T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SVRCRN, self).__init__(params, defaults)
         self.hes = None
         self.T_eps = T_eps
-        self.l_ = l_
+        self.l_ = 1 / (20 * lr)
         self.rho = rho
         self.c_ = c_
         self.eps = eps
@@ -485,14 +485,14 @@ class SVRCRN(COptimizer):
 
 
 class SVRC(COptimizer):
-    def __init__(self, params, l_=1,
+    def __init__(self, params, lr=0.05,
                  rho=100, fp=1e-1, T_eps=10, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        defaults = dict(l_=l_, rho=rho, fp=fp, T_eps=T_eps)
+        defaults = dict(lr=lr, rho=rho, fp=fp, T_eps=T_eps)
         super(SVRC, self).__init__(params, defaults)
         self.hes = None
-        self.l_ = l_
+        self.l_ = 1 / (20 * lr)
         self.rho = rho
         self.eps = min(self.l_ / (4 * self.rho), self.l_ ** 2 / (4 * self.rho))
         self.fp = fp
