@@ -334,8 +334,9 @@ class SCRN(COptimizer):
                 # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
                 delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
 
-        delta_m = grad * delta + 1 / 2 * delta.T * hdp + self.rho / 6 * torch.pow(torch.norm(delta), 3)
-
+        delta_m = [g * d for g, d in zip(grad, delta)]
+        delta_m = [dm + 0.5 * dt @ h + self.rho / 6 * torch.pow(torch.norm(d), 3) for dm, dt, h, d in
+                   zip(delta_m, delta, hdp, delta)]
         self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
 
         return delta, delta_m
