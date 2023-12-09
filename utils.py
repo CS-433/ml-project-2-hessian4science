@@ -10,7 +10,7 @@ from models import NN
 
 
 @torch.no_grad()
-def validate(model, device, val_loader, criterion, verbose=True):
+def validate(model, device, val_loader, criterion):
     """
     Validate a model
     :param model: model to validate
@@ -33,19 +33,10 @@ def validate(model, device, val_loader, criterion, verbose=True):
         correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(val_loader.dataset)
-    if verbose:
-        print(
-            "Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)".format(
-                test_loss,
-                correct,
-                len(val_loader.dataset),
-                100.0 * correct / len(val_loader.dataset),
-            )
-        )
     return test_loss, correct / len(val_loader.dataset)
 
 
-def train_epoch(model, optimizer, scheduler, criterion, train_loader, epoch, device, verbose=True):
+def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbose=True, scheduler=None):
     """
     Train a model for one epoch
     :param model: model to train
@@ -69,26 +60,34 @@ def train_epoch(model, optimizer, scheduler, criterion, train_loader, epoch, dev
         loss = criterion(output, target)
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        if scheduler is not None:
+            scheduler.step()
         accuracy_float = (output.argmax(dim=1) == target).float().mean().item()
 
         loss_float = loss.item()
         loss_history.append(loss_float)
 
         accuracy_history.append(accuracy_float)
-        lr_history.append(scheduler.get_last_lr()[0])
+        if scheduler is not None:
+            lr_history.append(scheduler.get_last_lr()[0])
+        else:
+            lr_history.append(optimizer.param_groups[0]['lr'])
         if verbose and batch_idx % (len(train_loader.dataset) // len(data) // 10) == 0:
+            if scheduler is None:
+                lr = optimizer.param_groups[0]['lr']
+            else:
+                lr = scheduler.get_last_lr()[0]
             print(
                 f"Train Epoch: {epoch}-{batch_idx:03d} "
                 f"batch_loss={loss_float:0.2e} "
                 f"batch_acc={accuracy_float:0.3f} "
-                f"lr={scheduler.get_last_lr()[0]:0.3e} "
+                f"lr={lr:0.3e} "
             )
 
     return loss_history, accuracy_history, lr_history
 
 
-def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", verbose=True):
+def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", verbose=True, with_scheduler=True):
     """
     Train a model
     :param model: model to train
@@ -98,14 +97,17 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", v
     :param epochs: number of epochs
     :param device: device to use
     :param verbose: boolean to print or not
+    :param with_scheduler: boolean to use a scheduler or not
     :return: train accuracy history, train loss history, validation accuracy history, validation loss history, learning rate history
     """
     model = model.to(device=device)
     criterion = torch.nn.functional.cross_entropy
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=(len(train_loader.dataset) * epochs) // train_loader.batch_size,
-    )
+    scheduler = None
+    if with_scheduler:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=(len(train_loader.dataset) * epochs) // train_loader.batch_size,
+        )
 
     # ===== Train Model =====
     lr_history = []
@@ -116,13 +118,13 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", v
     pbar = tqdm(total=epochs, unit="epochs")
     for epoch in range(1, epochs + 1):
         train_loss, train_acc, lrs = train_epoch(
-            model, optimizer, scheduler, criterion, train_loader, epoch, device, verbose=verbose
+            model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
         )
         train_loss_history.extend(train_loss)
         train_acc_history.extend(train_acc)
         lr_history.extend(lrs)
 
-        val_loss, val_acc = validate(model, device, val_loader, criterion, verbose=verbose)
+        val_loss, val_acc = validate(model, device, val_loader, criterion)
         val_loss_history.append(val_loss)
         val_acc_history.append(val_acc)
         pbar.update(1)
@@ -175,6 +177,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                 test_acc_history = []
                 test_loss_history = []
                 for opt in optimizers_:
+                    print(f"Optimizer: {opt}")
                     hidden_layers = [args.hidden] * num_layer
                     hidden_layers.append(n_class)
                     model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
@@ -188,13 +191,14 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                                          optimizer,
                                          epochs=args.epochs,
                                          device=device,
-                                         verbose=verbose)
+                                         verbose=verbose,
+                                         with_scheduler=args.scheduler)
                     train_acc_history_list.append(train_acc_history)
                     train_loss_history_list.append(train_loss_history)
                     val_acc_history_list.append(val_acc_history)
                     val_loss_history_list.append(val_loss_history)
                     lr_history_list.append(lr_history)
-                    test_loss, test_acc = validate(model, device, test_dataloader, criterion, verbose=verbose)
+                    test_loss, test_acc = validate(model, device, test_dataloader, criterion)
                     test_acc_history.append(test_acc)
                     test_loss_history.append(test_loss)
 
@@ -209,7 +213,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                     if args.save:
                         torch.save(model.state_dict(),
-                                   os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}.pt"))
+                                   os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
 
                 if args.plot:
                     n_train = len(train_acc_history_list[0])
@@ -221,7 +225,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Accuracy")
-                    plt.savefig(os.path.join(save_path, f"training_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.savefig(os.path.join(save_path, f"training_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -229,7 +233,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Loss")
-                    plt.savefig(os.path.join(save_path, f"loss_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.savefig(os.path.join(save_path, f"loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -237,7 +241,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Learning Rate")
-                    plt.savefig(os.path.join(save_path, f"lr_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.savefig(os.path.join(save_path, f"lr_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -245,7 +249,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Accuracy")
-                    plt.savefig(os.path.join(save_path, f"val_acc_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.savefig(os.path.join(save_path, f"val_acc_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -253,7 +257,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Loss")
-                    plt.savefig(os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.savefig(os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
     return best_lr, best_opt, best_num_layers, best_conv_number, best_model

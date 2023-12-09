@@ -1,5 +1,4 @@
-from torch import nn
-from torch.autograd.functional import hessian, hvp
+from torch.autograd.functional import hvp
 from torch.optim import Optimizer
 import torch
 import numpy as np
@@ -8,6 +7,23 @@ import numpy as np
 ##################
 ##  First Order ##
 ##################
+
+class Adam(torch.optim.Adam):
+    def __init__(self, *args, **kwargs):
+        super(Adam, self).__init__(*args, **kwargs)
+
+    def step(self, closure=None):
+        return super(Adam, self).step(closure)
+
+
+class SGD(torch.optim.SGD):
+    def __init__(self, *args, **kwargs):
+        super(SGD, self).__init__(*args, **kwargs)
+
+    def step(self, closure=None):
+        return super(SGD, self).step(closure)
+
+
 class StormOptimizer(Optimizer):
     # Storing the parameters required in defaults dictionary
     # lr-->learning rate
@@ -85,7 +101,8 @@ class StormOptimizer(Optimizer):
 
 class Adaptive_SGD(Optimizer):
     def __init__(self, params, lr=1e-1, f=lambda x: x, T=100):
-        super(Adaptive_SGD, self).__init__(params, dict())
+        defaults = dict(lr=lr, f=f, T=T)
+        super(Adaptive_SGD, self).__init__(params, defaults)
         self.f = f
         self.lr = lr
         self.T = T
@@ -107,7 +124,9 @@ class HVP_RVR(Optimizer):
     def __init__(self, params, b=0.1,
                  sigma1=1, sigma2=1, l1=1, l2=1, eps=1e-2, lr=1e-1, mode='SGD'
                  , adaptive=False, T=100, func=lambda x: x):
-        super(HVP_RVR, self).__init__(params, dict())
+        defaults = dict(b=b, sigma1=sigma1, sigma2=sigma2, l1=l1, l2=l2, eps=eps, lr=lr, mode=mode, adaptive=adaptive,
+                        func=func, T=T)
+        super(HVP_RVR, self).__init__(params, defaults)
         self.f = None
         self.g = None
         self.parameters = params
@@ -225,8 +244,8 @@ class SCRN(Optimizer):
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        super(SCRN, self).__init__(params, dict())
+        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+        super(SCRN, self).__init__(params, defaults)
         self.hes = None
         self.T_eps = T_eps
         self.l_ = l_
@@ -331,8 +350,9 @@ class SCRN(Optimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, momentum=0.9, T_eps=10, l_=1, rho=1, c_=1, eps=1e-9, device=None):
-        super(SCRN_Momentum, self).__init__(params, T_eps, l_, rho, c_, eps, device)
+    def __init__(self, params, momentum=0.9, T_eps=10, l_=1, rho=1, c_=1, eps=1e-9):
+        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+        super(SCRN_Momentum, self).__init__(params, defaults)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
         self.momentum = momentum
@@ -362,8 +382,8 @@ class SVRCRN(Optimizer):
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        super(SVRCRN, self).__init__(params, dict())
+        defaults = dict(T_eps=T_eps, l_=l_, rho=rho, c_=c_, eps=eps)
+        super(SVRCRN, self).__init__(params, defaults)
         self.hes = None
         self.T_eps = T_eps
         self.l_ = l_
@@ -451,7 +471,8 @@ class SVRC(Optimizer):
                  rho=100, fp=1e-1, T_eps=10, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        super(SVRC, self).__init__(params, dict())
+        defaults = dict(l_=l_, rho=rho, fp=fp, T_eps=T_eps)
+        super(SVRC, self).__init__(params, defaults)
         self.hes = None
         self.l_ = l_
         self.rho = rho
@@ -535,7 +556,3 @@ class SVRC(Optimizer):
         for l in self.log:
             f.write(str(l) + '\n')
         f.close()
-
-
-if __name__ == '__main__':
-    pass
