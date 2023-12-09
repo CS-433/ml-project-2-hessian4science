@@ -1,13 +1,25 @@
-from functools import partial
+import os
 
 import numpy as np
 import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+import optimizers
+from models import NN
+
 
 @torch.no_grad()
 def validate(model, device, val_loader, criterion, verbose=True):
+    """
+    Validate a model
+    :param model: model to validate
+    :param device: device to use
+    :param val_loader: dataloader for validation set
+    :param criterion: loss function
+    :param verbose: boolean to print or not
+    :return: validation loss, validation accuracy
+    """
     model.eval()
     test_loss = 0
     correct = 0
@@ -34,6 +46,18 @@ def validate(model, device, val_loader, criterion, verbose=True):
 
 
 def train_epoch(model, optimizer, scheduler, criterion, train_loader, epoch, device, verbose=True):
+    """
+    Train a model for one epoch
+    :param model: model to train
+    :param optimizer: optimizer
+    :param scheduler: scheduler
+    :param criterion: loss function
+    :param train_loader: dataloader for training set
+    :param epoch: current epoch
+    :param device: device to use
+    :param verbose: boolean to print or not
+    :return: train loss history, train accuracy history, learning rate history
+    """
     model.train()
     loss_history = []
     accuracy_history = []
@@ -64,7 +88,18 @@ def train_epoch(model, optimizer, scheduler, criterion, train_loader, epoch, dev
     return loss_history, accuracy_history, lr_history
 
 
-def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", plot=True, verbose=True):
+def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", verbose=True):
+    """
+    Train a model
+    :param model: model to train
+    :param train_loader: dataloader for training set
+    :param val_loader: dataloader for validation set
+    :param optimizer: optimizer
+    :param epochs: number of epochs
+    :param device: device to use
+    :param verbose: boolean to print or not
+    :return: train accuracy history, train loss history, validation accuracy history, validation loss history, learning rate history
+    """
     model = model.to(device=device)
     criterion = torch.nn.functional.cross_entropy
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -94,36 +129,131 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", p
         avg_train_loss = sum(train_loss) / len(train_loss)
         avg_train_acc = sum(train_acc) / len(train_acc)
         pbar.set_description_str(
-            f"Epoch {epoch + 1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Train Acc: {avg_train_acc:.2f}%, Test Loss: {val_loss:.4f}, Test Acc: {val_acc:.2f}%")
+            f"Epoch {epoch + 1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Train Acc: {avg_train_acc:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
     pbar.close()
 
-    # ===== Plot training curves =====
-    if plot:
-        n_train = len(train_acc_history)
-        t_train = epochs * np.arange(n_train) / n_train
-        t_val = np.arange(1, epochs + 1)
-
-        plt.figure(figsize=(6.4 * 3, 4.8))
-        plt.subplot(1, 3, 1)
-        plt.plot(t_train, train_acc_history, label="Train")
-        plt.plot(t_val, val_acc_history, label="Val")
-        plt.legend()
-        plt.xlabel("Epoch")
-        plt.ylabel("Accuracy")
-
-        plt.subplot(1, 3, 2)
-        plt.plot(t_train, train_loss_history, label="Train")
-        plt.plot(t_val, val_loss_history, label="Val")
-        plt.legend()
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-
-        plt.subplot(1, 3, 3)
-        plt.plot(t_train, lr_history)
-        plt.xlabel("Epoch")
-        plt.ylabel("Learning Rate")
-
-        plt.savefig('training_curves.png')
-        plt.close()
-
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
+
+
+def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
+                     dataloader, val_dataloader, test_dataloader, input_shape, n_class, device='cpu', args=None,
+                     verbose=True):
+    """
+        Cross validation for the best hyperparameters
+        :param lrs: list of learning rates
+        :param optimizers_: list of optimizers
+        :param num_layers: list of number of layers
+        :param conv_numbers: list of number of convolutional layers
+        :param criterion: loss function
+        :param dataloader: dataloader for training set
+        :param val_dataloader: dataloader for validation set
+        :param test_dataloader: dataloader for test set
+        :param n_class: number of classes
+        :param input_shape: shape of the input
+        :param device: device to use
+        :param args: arguments
+        :param verbose: boolean to print or not
+        :return: best hyperparameters
+        """
+    best_acc = 0
+    best_lr = 0
+    best_opt = None
+    best_num_layers = 0
+    best_conv_number = 0
+    best_model = None
+    save_path = os.path.join(args.save_path, f"{args.dataset}/")
+    os.makedirs(save_path, exist_ok=True)
+    for num_layer in num_layers:
+        for conv_number in conv_numbers:
+            for lr in lrs:
+                print(f"lr: {lr}, num_layer: {num_layer}, conv_number: {conv_number}")
+                train_acc_history_list = []
+                train_loss_history_list = []
+                val_acc_history_list = []
+                val_loss_history_list = []
+                lr_history_list = []
+                test_acc_history = []
+                test_loss_history = []
+                for opt in optimizers_:
+                    hidden_layers = [args.hidden] * num_layer
+                    hidden_layers.append(n_class)
+                    model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
+                    optimizer = getattr(optimizers, opt)(model.parameters(), lr=lr)
+                    (train_acc_history,
+                     train_loss_history, val_acc_history,
+                     val_loss_history,
+                     lr_history) = learn(model,
+                                         dataloader,
+                                         val_dataloader,
+                                         optimizer,
+                                         epochs=args.epochs,
+                                         device=device,
+                                         verbose=verbose)
+                    train_acc_history_list.append(train_acc_history)
+                    train_loss_history_list.append(train_loss_history)
+                    val_acc_history_list.append(val_acc_history)
+                    val_loss_history_list.append(val_loss_history)
+                    lr_history_list.append(lr_history)
+                    test_loss, test_acc = validate(model, device, test_dataloader, criterion, verbose=verbose)
+                    test_acc_history.append(test_acc)
+                    test_loss_history.append(test_loss)
+
+                    if val_acc_history[-1] > best_acc:
+                        best_acc = val_acc_history[-1]
+                        best_lr = lr
+                        best_opt = opt
+                        best_num_layers = num_layer
+                        best_conv_number = conv_number
+                        best_model = model
+                    if verbose:
+                        print(f"Test Acc for {opt}: {test_acc:0.2f}%")
+                    if args.save:
+                        torch.save(model.state_dict(),
+                                   os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}.pt"))
+
+                if args.plot:
+                    n_train = len(train_acc_history_list[0])
+                    t_train = args.epochs * np.arange(n_train) / n_train
+                    t_val = np.arange(1, args.epochs + 1)
+
+                    for i, opt in enumerate(optimizers_):
+                        plt.plot(t_train, train_acc_history_list[i], label=opt)
+                    plt.legend()
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Accuracy")
+                    plt.savefig(os.path.join(save_path, f"training_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.close()
+
+                    for i, opt in enumerate(optimizers_):
+                        plt.plot(t_train, train_loss_history_list[i], label=opt)
+                    plt.legend()
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Loss")
+                    plt.savefig(os.path.join(save_path, f"loss_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.close()
+
+                    for i, opt in enumerate(optimizers_):
+                        plt.plot(t_train, lr_history_list[i], label=opt)
+                    plt.legend()
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Learning Rate")
+                    plt.savefig(os.path.join(save_path, f"lr_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.close()
+
+                    for i, opt in enumerate(optimizers_):
+                        plt.plot(t_val, val_acc_history_list[i], label=opt)
+                    plt.legend()
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Accuracy")
+                    plt.savefig(os.path.join(save_path, f"val_acc_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.close()
+
+                    for i, opt in enumerate(optimizers_):
+                        plt.plot(t_val, val_loss_history_list[i], label=opt)
+                    plt.legend()
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Loss")
+                    plt.savefig(os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}.png"))
+                    plt.close()
+
+    return best_lr, best_opt, best_num_layers, best_conv_number, best_model

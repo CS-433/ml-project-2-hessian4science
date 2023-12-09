@@ -5,10 +5,6 @@ import torch
 import numpy as np
 
 
-
-
-
-
 ##################
 ##  First Order ##
 ##################
@@ -80,13 +76,11 @@ class StormOptimizer(Optimizer):
                 else:
                     momentum.update({p: dp})
 
-                # Updation of model parameter p
+                # Update of model parameter p
                 p.data = p.data - learn_rate * momentum[p]
                 learn_rate = group['lr']
 
         return loss
-
-
 
 
 class Adaptive_SGD(Optimizer):
@@ -103,8 +97,6 @@ class Adaptive_SGD(Optimizer):
             for p in group["params"]:
                 p.data -= lr * p.grad
         self.count += 1
-
-
 
 
 ##################
@@ -127,7 +119,7 @@ class HVP_RVR(Optimizer):
         self.eps = eps
         self.lr = lr
         self.mode = None
-        
+
         if mode == 'SGD':
             self.mode = self.SGD
         elif mode == "SCRN":
@@ -256,20 +248,19 @@ class SCRN(Optimizer):
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
-        deltas,  = self.cubic_regularization(self.eps, grad)
+        deltas, delta_m = self.cubic_regularization(self.eps, grad)
 
         for group in self.param_groups:
             for p, delta in zip(group["params"], deltas):
                 p.data += delta
 
-        if delta_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
-            delta = self.cubic_final(self.eps, grad)
+        if delta_m >= (-1 / 100) * torch.sqrt(torch.pow(self.eps, 3) / self.rho):
+            deltas = self.cubic_final(self.eps, grad)
             for group in self.param_groups:
                 for p, delta in zip(group["params"], deltas):
                     p.data += delta
             return True
-        
-            
+
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
     def cubic_regularization(self, eps, grad):
         g_norm = [torch.norm(g) for g in grad]
@@ -283,7 +274,7 @@ class SCRN(Optimizer):
 
             # -temp + sqrt(temp^2 + 2 ||g_norm||/ρ)
             R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
-            
+
             # ∆ ← −Rc g/||g||
             delta = [-r * g / a for r, g in zip(R_c, grad)]
             self.log.append(('1', a.item(), sum([torch.norm(d) for d in delta]).item()))
@@ -298,19 +289,17 @@ class SCRN(Optimizer):
             # g_ ← g + σv
             g_ = [g + sigma * v for g, v in zip(grad, vec)]
             for _ in range(self.T_eps):
-
                 # B[∆]
                 hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
                           tuple(delta))[1]
                 # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
                 delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
 
-        detla_m = grad * delta + 1/2 * delta.T * hdp + self.rho/6 * torch.pow(torch.norm(delta),3)
-                
-        self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
-        
-        return delta, detla_m
+        delta_m = grad * delta + 1 / 2 * delta.T * hdp + self.rho / 6 * torch.pow(torch.norm(delta), 3)
 
+        self.log.append(('2', a.item(), sum([torch.norm(d) for d in delta]).item()))
+
+        return delta, delta_m
 
     def cubic_final(self, eps, grad):
         # ∆ ← 0, g_m ← g, mu ← 1/(20l)
@@ -319,12 +308,12 @@ class SCRN(Optimizer):
         mu = 1.0 / (20.0 * self.l_)
         grad_norm = [torch.norm(g) for g in grad]
 
-        while torch.sum(grad_norm) >= eps/2:
+        while torch.sum(grad_norm) >= eps / 2:
             delta -= mu * grad_m
 
             hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
-                          tuple(delta))[1]
-            
+                      tuple(delta))[1]
+
             # g_m ← g + B[∆] + ρ/2||∆||
             grad_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(grad, delta, hdp)]
             grad_norm = [torch.norm(g) for g in grad_m]
@@ -348,9 +337,11 @@ class SCRN_Momentum(SCRN):
         self.name = 'SCRN_Momentum'
         self.momentum = momentum
         self.old_delta = None
-
+        self.training = True
 
     def step(self, **kwargs):
+        if not self.training:
+            return
         grad = [p.grad for group in self.param_groups for p in group['params']]
         deltas, delta_m = self.cubic_regularization(self.eps, grad)
         self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
@@ -358,12 +349,13 @@ class SCRN_Momentum(SCRN):
             for p, delta in zip(group["params"], self.old_delta):
                 p.data += delta
 
-        if delta_m >= (-1/100) * torch.sqrt(torch.pow(self.eps,3)/self.rho):
-            delta = self.cubic_final(self.eps, grad)
+        if delta_m >= (-1 / 100) * torch.sqrt(torch.pow(self.eps, 3) / self.rho):
+            deltas = self.cubic_final(self.eps, grad)
             for group in self.param_groups:
                 for p, delta in zip(group["params"], deltas):
                     p.data += delta
-            return True
+            self.training = False
+
 
 class SVRCRN(Optimizer):
     def __init__(self, params, T_eps=10, l_=1,
@@ -543,6 +535,7 @@ class SVRC(Optimizer):
         for l in self.log:
             f.write(str(l) + '\n')
         f.close()
+
 
 if __name__ == '__main__':
     pass

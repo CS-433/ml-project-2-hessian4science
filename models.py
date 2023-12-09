@@ -3,7 +3,19 @@ import torch.nn as nn
 
 
 class NN(nn.Module):
+    """
+    Simple feedforward neural network.
+    """
+
     def __init__(self, input_shape, hidden, activation='relu', sigmoid_output=True, conv_number=1):
+        """
+        Initialize the neural network.
+        :param input_shape: The shape of the input.
+        :param hidden: A list of hidden layer sizes.
+        :param activation: The activation function to use.
+        :param sigmoid_output: Whether to use a sigmoid activation on the output.
+        :param conv_number: The number of convolutional layers to use.
+        """
         super().__init__()
         self.seq = nn.Sequential()
         if conv_number > 0:
@@ -34,4 +46,9 @@ class NN(nn.Module):
             self.seq.append(nn.Sigmoid())
 
     def forward(self, x):
+        """
+        Forward pass.
+        :param x: The input.
+        :return: The output.
+        """
         return self.seq(x)

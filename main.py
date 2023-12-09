@@ -1,37 +1,51 @@
+# Import necessary libraries
 from torchvision.datasets import MNIST, CIFAR10, CIFAR100
 from torchvision.transforms import v2
 from torch.utils.data import DataLoader
-from torch import optim
 import torch
-import os
 import argparse
 
-from models import NN
-from utils import learn
+# Import custom modules
+from utils import cross_validation
 
+# Main function
 if __name__ == "__main__":
+    """
+    Main function to run the script. It parses command-line arguments, loads the dataset, splits it into training and validation sets,
+    creates data loaders, sets the loss function, and performs cross-validation to find the best hyperparameters and optimizer.
+    """
+    # Create argument parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", default="MNIST")
-    parser.add_argument("--hidden", default=128, type=int)
-    parser.add_argument("--max_iters", default=1000, type=int)
-    parser.add_argument("--num_layers", default=2, type=int)
-    parser.add_argument("--conv_number", default=1, type=int)
-    parser.add_argument("--batch_size", default=128, type=int)
-    parser.add_argument("--epochs", default=100, type=int)
-    parser.add_argument("--plot", action="store_true")
-    parser.add_argument("--lr", default=0.001, type=float)
-    parser.add_argument("--weight_decay", default=0.0, type=float)
-    parser.add_argument("--optimizer", default="Adam")
-    parser.add_argument("--activation", default="relu")
-    parser.add_argument("--save", action="store_true")
-    parser.add_argument("--save_path", default="results")
-    parser.add_argument("--criterion", default="cross_entropy")
+    # Add arguments to the parser
+    parser.add_argument("--dataset", default="MNIST", help="The dataset to use for training and testing.")
+    parser.add_argument("--hidden", default=128, type=int, help="The number of hidden units in the model.")
+    parser.add_argument("--num_layers", default="2", help="The list of numbers of layers in the model.")
+    parser.add_argument("--conv_number", default="1", help="The list of numbers of convolutional layers in the model.")
+    parser.add_argument("--batch_size", default=512, type=int, help="The batch size for training.")
+    parser.add_argument("--epochs", default=1, type=int, help="The number of epochs to train for.")
+    parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
+    parser.add_argument("--lr", default="0.001", help="The list of learning rates for the optimizers.")
+    parser.add_argument("--optimizer", default="StormOptimizer", help="The list of optimizers to use for training.")
+    parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
+    parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
+    parser.add_argument("--save_path", default="./", help="The directory where the trained model should be saved.")
+    parser.add_argument("--criterion", default="cross_entropy", help="The loss function to use for training.")
+    parser.add_argument("--verbose", action="store_true", help="Whether to print detailed training progress.")
 
+    # Parse the arguments
     args = parser.parse_args()
 
+    # Convert string arguments to appropriate data types
+    lrs = [float(lr) for lr in args.lr.split(",")]
+    optimizers_ = args.optimizer.split(",")
+    num_layers = [int(layer) for layer in args.num_layers.split(",")]
+    conv_numbers = [int(conv) for conv in args.conv_number.split(",")]
+
+    # Check if CUDA is available and set the device accordingly
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using {device}")
 
+    # Load the appropriate dataset based on the argument
     if args.dataset == "MNIST":
         transformer_mnist = v2.Compose([
             v2.ToImage(),
@@ -65,26 +79,23 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=8)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8)
+    # Split the dataset into training and validation sets
+    val_size = int(0.1 * len(dataset))
+    train_size = len(dataset) - val_size
+    dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
+    # Create data loaders for the training, validation, and test sets
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+
+    # Set the loss function based on the argument
     if args.criterion == "cross_entropy":
         criterion = torch.nn.functional.cross_entropy
     else:
         raise NotImplementedError
 
-    hidden_layers = [args.hidden] * args.num_layers
-    hidden_layers.append(n_class)
-
-    model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=args.conv_number)
-    optimizer = getattr(optim, args.optimizer)(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
-    train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history = learn(model, dataloader,
-                                                                                                 test_dataloader,
-                                                                                                 optimizer,
-                                                                                                 epochs=args.epochs,
-                                                                                                 device=device,
-                                                                                                 plot=args.plot)
-    if args.save:
-        torch.save(model.state_dict(), os.path.join(args.save_path,
-                                                    f"{args.dataset}_{args.optimizer}_{args.activation}_{args.criterion}_{args.gamma}_{args.lr}_{args.weight_decay}_{args.hidden}_{args.num_layers}_{args.conv_number}.pth"))
+    # Perform cross-validation to find the best hyperparameters
+    cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
+                     dataloader, val_dataloader, test_dataloader, input_shape, n_class, device=device,
+                     args=args, verbose=args.verbose)
