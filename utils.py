@@ -61,7 +61,7 @@ def train_epoch(model, optimizer, criterion, train_loader, scaler, epoch, device
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        with autocast():
+        with autocast(device_type=device):
             output = model(data)
             loss = criterion(output, target)
         scaler.scale(loss).backward()
