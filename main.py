@@ -22,10 +22,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", default="2", help="The list of numbers of layers in the model.")
     parser.add_argument("--conv_number", default="1", help="The list of numbers of convolutional layers in the model.")
     parser.add_argument("--batch_size", default=256, type=int, help="The batch size for training.")
-    parser.add_argument("--epochs", default=10, type=int, help="The number of epochs to train for.")
+    parser.add_argument("--epochs", default=1, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
-    parser.add_argument("--lr", default="0.1,0.001", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="Adam,StormOptimizer", help="The list of optimizers to use for training.")
+    parser.add_argument("--lr", default="0.1", help="The list of learning rates for the optimizers.")
+    parser.add_argument("--optimizer", default="HVP_RVR,SCRN,SCRN_Momentum,SVRCRN,SVRC", help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
     parser.add_argument("--save_path", default="./results/", help="The directory where the trained model should be saved.")
@@ -94,15 +94,10 @@ if __name__ == "__main__":
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
-    # Set the loss function based on the argument
-    if args.criterion == "cross_entropy":
-        criterion = torch.nn.functional.cross_entropy
-    else:
-        raise NotImplementedError
 
     # Perform cross-validation to find the best hyperparameters
     best_lr, best_opt, best_num_layers, best_conv_number, best_model = cross_validation(lrs, optimizers_, num_layers,
-                                                                                        conv_numbers, criterion,
+                                                                                        conv_numbers,
                                                                                         dataloader, val_dataloader,
                                                                                         test_dataloader, input_shape,
                                                                                         n_class, device=device,

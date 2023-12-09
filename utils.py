@@ -59,6 +59,7 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
         output = model(data)
         loss = criterion(output, target)
         loss.backward()
+        optimizer.set_f(model, data, target, criterion)
         optimizer.step()
         if scheduler is not None:
             scheduler.step()
@@ -87,13 +88,14 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
     return loss_history, accuracy_history, lr_history
 
 
-def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", verbose=True, with_scheduler=True):
+def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, device="cpu", verbose=True, with_scheduler=True):
     """
     Train a model
     :param model: model to train
     :param train_loader: dataloader for training set
     :param val_loader: dataloader for validation set
     :param optimizer: optimizer
+    :param criterion: loss function
     :param epochs: number of epochs
     :param device: device to use
     :param verbose: boolean to print or not
@@ -101,7 +103,6 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", v
     :return: train accuracy history, train loss history, validation accuracy history, validation loss history, learning rate history
     """
     model = model.to(device=device)
-    criterion = torch.nn.functional.cross_entropy
     scheduler = None
     if with_scheduler:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -137,7 +138,7 @@ def learn(model, train_loader, val_loader, optimizer, epochs=10, device="cpu", v
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
 
 
-def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
+def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                      dataloader, val_dataloader, test_dataloader, input_shape, n_class, device='cpu', args=None,
                      verbose=True):
     """
@@ -146,7 +147,6 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
         :param optimizers_: list of optimizers
         :param num_layers: list of number of layers
         :param conv_numbers: list of number of convolutional layers
-        :param criterion: loss function
         :param dataloader: dataloader for training set
         :param val_dataloader: dataloader for validation set
         :param test_dataloader: dataloader for test set
@@ -165,6 +165,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
     best_model = None
     save_path = os.path.join(args.save_path, f"{args.dataset}/")
     os.makedirs(save_path, exist_ok=True)
+    criterion = torch.nn.functional.cross_entropy
     for num_layer in num_layers:
         for conv_number in conv_numbers:
             for lr in lrs:
@@ -189,6 +190,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers, criterion,
                                          dataloader,
                                          val_dataloader,
                                          optimizer,
+                                         criterion,
                                          epochs=args.epochs,
                                          device=device,
                                          verbose=verbose,

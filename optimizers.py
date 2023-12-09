@@ -15,6 +15,9 @@ class Adam(torch.optim.Adam):
     def step(self, closure=None):
         return super(Adam, self).step(closure)
 
+    def set_f(self, data):
+        return
+
 
 class SGD(torch.optim.SGD):
     def __init__(self, *args, **kwargs):
@@ -23,8 +26,28 @@ class SGD(torch.optim.SGD):
     def step(self, closure=None):
         return super(SGD, self).step(closure)
 
+    def set_f(self, data):
+        return
 
-class StormOptimizer(Optimizer):
+
+class COptimizer(Optimizer):
+    def __init__(self, *args, **kwargs):
+        self.f = None
+        self.has_f = False
+        super(COptimizer, self).__init__(*args, **kwargs)
+
+    def set_f(self, model, data, target, criterion):
+        if self.has_f:
+            names = list(n for n, _ in model.named_parameters())
+
+            def f(*params):
+                out: torch.Tensor = torch.func.functional_call(model, {n: p for n, p in zip(names, params)}, data)
+                return criterion(out, target)
+
+            self.f = f
+
+
+class StormOptimizer(COptimizer):
     # Storing the parameters required in defaults dictionary
     # lr-->learning rate
     # c-->parameter to be swept over logarithmically spaced grid as per paper
@@ -99,10 +122,11 @@ class StormOptimizer(Optimizer):
         return loss
 
 
-class Adaptive_SGD(Optimizer):
+class Adaptive_SGD(COptimizer):
     def __init__(self, params, lr=1e-1, f=lambda x: x, T=100):
         defaults = dict(lr=lr, f=f, T=T)
         super(Adaptive_SGD, self).__init__(params, defaults)
+        self.has_f = False
         self.f = f
         self.lr = lr
         self.T = T
@@ -120,7 +144,7 @@ class Adaptive_SGD(Optimizer):
 ## Second Order ##
 ##################
 
-class HVP_RVR(Optimizer):
+class HVP_RVR(COptimizer):
     def __init__(self, params, b=0.1,
                  sigma1=1, sigma2=1, l1=1, l2=1, eps=1e-2, lr=1e-1, mode='SGD'
                  , adaptive=False, T=100, func=lambda x: x):
@@ -128,6 +152,7 @@ class HVP_RVR(Optimizer):
                         func=func, T=T)
         super(HVP_RVR, self).__init__(params, defaults)
         self.f = None
+        self.has_f = True
         self.g = None
         self.parameters = params
         self.b = b
@@ -150,9 +175,6 @@ class HVP_RVR(Optimizer):
         self.count = 0
         self.device = 'cuda'
         self.deltas = None
-
-    def set_f(self, f):
-        self.f = f
 
     def step(self, **kwargs):
         self.mode()
@@ -239,7 +261,7 @@ class HVP_RVR(Optimizer):
         return delta
 
 
-class SCRN(Optimizer):
+class SCRN(COptimizer):
     def __init__(self, params, T_eps=10, l_=1,
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
@@ -254,6 +276,7 @@ class SCRN(Optimizer):
         self.eps = eps
         self.params = params
         self.f = None
+        self.has_f = True
         self.device = device
         self.log = []
         self.name = 'SCRN'
@@ -261,9 +284,6 @@ class SCRN(Optimizer):
     def set_l(self, l, rho):
         self.l_ = l
         self.rho = rho
-
-    def set_f(self, f):
-        self.f = f
 
     def step(self, **kwargs):
         grad = [p.grad for group in self.param_groups for p in group['params']]
@@ -377,7 +397,7 @@ class SCRN_Momentum(SCRN):
             self.training = False
 
 
-class SVRCRN(Optimizer):
+class SVRCRN(COptimizer):
     def __init__(self, params, T_eps=10, l_=1,
                  rho=1, c_=1, eps=1e-2, device=None):
         if device is None:
@@ -392,6 +412,7 @@ class SVRCRN(Optimizer):
         self.eps = eps
         self.params = params
         self.f = None
+        self.has_f = True
         self.device = device
         self.log = []
         self.name = 'SCRN'
@@ -401,9 +422,6 @@ class SVRCRN(Optimizer):
     def set_l(self, l, rho):
         self.l_ = l
         self.rho = rho
-
-    def set_f(self, f):
-        self.f = f
 
     def reset_vt(self):
         self.vt = None
@@ -466,7 +484,7 @@ class SVRCRN(Optimizer):
         f.close()
 
 
-class SVRC(Optimizer):
+class SVRC(COptimizer):
     def __init__(self, params, l_=1,
                  rho=100, fp=1e-1, T_eps=10, device=None):
         if device is None:
@@ -484,14 +502,12 @@ class SVRC(Optimizer):
         self.T_eps = T_eps
         self.params = params
         self.f = None
+        self.has_f = True
         self.device = device
         self.log = []
         self.name = 'SVRC'
         self.vt = None
         self.deltas = None
-
-    def set_f(self, f):
-        self.f = f
 
     def reset_vt(self):
         self.vt = None
