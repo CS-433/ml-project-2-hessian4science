@@ -25,10 +25,12 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default=1, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
     parser.add_argument("--lr", default="0.1", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="Adam,SGD,StormOptimizer,Adaptive_SGD", help="The list of optimizers to use for training.")
+    parser.add_argument("--optimizer", default="Adam,SGD,StormOptimizer,Adaptive_SGD",
+                        help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
-    parser.add_argument("--save_path", default="./results/", help="The directory where the trained model should be saved.")
+    parser.add_argument("--save_path", default="./results/",
+                        help="The directory where the trained model should be saved.")
     parser.add_argument("--criterion", default="cross_entropy", help="The loss function to use for training.")
     parser.add_argument("--verbose", action="store_true", help="Whether to print detailed training progress.")
     parser.add_argument("--scheduler", action="store_true", help="Whether to use a learning rate scheduler.")
@@ -93,7 +95,6 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
-
 
     # Perform cross-validation to find the best hyperparameters
     best_lr, best_opt, best_num_layers, best_conv_number, best_model = cross_validation(lrs, optimizers_, num_layers,

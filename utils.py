@@ -2,6 +2,8 @@ import os
 
 import numpy as np
 import torch
+from torch import nn, autocast
+from torch.cuda.amp import GradScaler
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -17,7 +19,6 @@ def validate(model, device, val_loader, criterion):
     :param device: device to use
     :param val_loader: dataloader for validation set
     :param criterion: loss function
-    :param verbose: boolean to print or not
     :return: validation loss, validation accuracy
     """
     model.eval()
@@ -36,7 +37,7 @@ def validate(model, device, val_loader, criterion):
     return test_loss, correct / len(val_loader.dataset)
 
 
-def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbose=True, scheduler=None):
+def train_epoch(model, optimizer, criterion, train_loader, scaler, epoch, device, verbose=True, scheduler=None):
     """
     Train a model for one epoch
     :param model: model to train
@@ -44,35 +45,44 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
     :param scheduler: scheduler
     :param criterion: loss function
     :param train_loader: dataloader for training set
+    :param scaler: scaler
     :param epoch: current epoch
     :param device: device to use
     :param verbose: boolean to print or not
     :return: train loss history, train accuracy history, learning rate history
     """
     model.train()
-    loss_history = []
-    accuracy_history = []
-    lr_history = []
+    # loss_history = []
+    # accuracy_history = []
+    # lr_history = []
+    total_loss = 0.0
+    total_accuracy = 0.0
+    total = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, target)
-        loss.backward()
+        with autocast():
+            output = model(data)
+            loss = criterion(output, target)
+        scaler.scale(loss).backward()
         optimizer.set_f(model, data, target, criterion)
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         if scheduler is not None:
             scheduler.step()
         accuracy_float = (output.argmax(dim=1) == target).float().mean().item()
 
         loss_float = loss.item()
-        loss_history.append(loss_float)
-
-        accuracy_history.append(accuracy_float)
-        if scheduler is not None:
-            lr_history.append(scheduler.get_last_lr()[0])
-        else:
-            lr_history.append(optimizer.param_groups[0]['lr'])
+        total_loss += loss_float * len(data)
+        total_accuracy += accuracy_float * len(data)
+        total += len(data)
+        # loss_history.append(loss_float)
+        #
+        # accuracy_history.append(accuracy_float)
+        # if scheduler is not None:
+        #     lr_history.append(scheduler.get_last_lr()[0])
+        # else:
+        #     lr_history.append(optimizer.param_groups[0]['lr'])
         if verbose and batch_idx % (len(train_loader.dataset) // len(data) // 10) == 0:
             if scheduler is None:
                 lr = optimizer.param_groups[0]['lr']
@@ -84,8 +94,11 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
                 f"batch_acc={accuracy_float:0.3f} "
                 f"lr={lr:0.3e} "
             )
-
-    return loss_history, accuracy_history, lr_history
+    if scheduler is None:
+        lr = optimizer.param_groups[0]['lr']
+    else:
+        lr = scheduler.get_last_lr()[0]
+    return total_loss / total, total_accuracy / total, lr
 
 
 def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, device="cpu", verbose=True, with_scheduler=True):
@@ -116,23 +129,24 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
     train_acc_history = []
     val_loss_history = []
     val_acc_history = []
+    scaler = GradScaler()
     pbar = tqdm(total=epochs, unit="epochs")
     for epoch in range(1, epochs + 1):
-        train_loss, train_acc, lrs = train_epoch(
-            model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
+        train_loss, train_acc, lr = train_epoch(
+            model, optimizer, criterion, train_loader, scaler, epoch, device, verbose=verbose, scheduler=scheduler
         )
-        train_loss_history.extend(train_loss)
-        train_acc_history.extend(train_acc)
-        lr_history.extend(lrs)
+
+        train_loss_history.append(train_loss)
+        train_acc_history.append(train_acc)
+        lr_history.append(lr)
 
         val_loss, val_acc = validate(model, device, val_loader, criterion)
         val_loss_history.append(val_loss)
         val_acc_history.append(val_acc)
         pbar.update(1)
-        avg_train_loss = sum(train_loss) / len(train_loss)
-        avg_train_acc = sum(train_acc) / len(train_acc)
         pbar.set_description_str(
-            f"Epoch {epoch + 1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Train Acc: {avg_train_acc:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
+            f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
+        torch.cuda.empty_cache()
     pbar.close()
 
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
@@ -165,7 +179,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
     best_model = None
     save_path = os.path.join(args.save_path, f"{args.dataset}/")
     os.makedirs(save_path, exist_ok=True)
-    criterion = torch.nn.functional.cross_entropy
+    criterion = nn.CrossEntropyLoss()
     for num_layer in num_layers:
         for conv_number in conv_numbers:
             for lr in lrs:
