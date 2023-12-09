@@ -37,7 +37,7 @@ def validate(model, device, val_loader, criterion):
     return test_loss, correct / len(val_loader.dataset)
 
 
-def train_epoch(model, optimizer, criterion, train_loader, scaler, epoch, device, verbose=True, scheduler=None):
+def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbose=True, scheduler=None):
     """
     Train a model for one epoch
     :param model: model to train
@@ -45,7 +45,6 @@ def train_epoch(model, optimizer, criterion, train_loader, scaler, epoch, device
     :param scheduler: scheduler
     :param criterion: loss function
     :param train_loader: dataloader for training set
-    :param scaler: scaler
     :param epoch: current epoch
     :param device: device to use
     :param verbose: boolean to print or not
@@ -61,15 +60,15 @@ def train_epoch(model, optimizer, criterion, train_loader, scaler, epoch, device
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        # with autocast(device_type=device):
-        #     output = model(data)
-        #     loss = criterion(output, target)
+        with autocast(device_type=device):
+            output = model(data)
+            loss = criterion(output, target)
         # scaler.scale(loss).backward()
         # optimizer.set_f(model, data, target, criterion)
         # scaler.step(optimizer)
         # scaler.update()
-        output = model(data)
-        loss = criterion(output, target)
+        # output = model(data)
+        # loss = criterion(output, target)
         loss.backward()
         optimizer.set_f(model, data, target, criterion)
         optimizer.step()
@@ -134,11 +133,11 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
     train_acc_history = []
     val_loss_history = []
     val_acc_history = []
-    scaler = GradScaler()
+    # scaler = GradScaler()
     pbar = tqdm(total=epochs, unit="epochs")
     for epoch in range(1, epochs + 1):
         train_loss, train_acc, lr = train_epoch(
-            model, optimizer, criterion, train_loader, scaler, epoch, device, verbose=verbose, scheduler=scheduler
+            model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
         )
 
         train_loss_history.append(train_loss)
