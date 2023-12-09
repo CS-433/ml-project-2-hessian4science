@@ -15,7 +15,7 @@ class Adam(torch.optim.Adam):
     def step(self, closure=None):
         return super(Adam, self).step(closure)
 
-    def set_f(self, data):
+    def set_f(self, model, data, target, criterion):
         return
 
 
@@ -26,7 +26,7 @@ class SGD(torch.optim.SGD):
     def step(self, closure=None):
         return super(SGD, self).step(closure)
 
-    def set_f(self, data):
+    def set_f(self, model, data, target, criterion):
         return
 
 
