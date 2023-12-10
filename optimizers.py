@@ -261,7 +261,7 @@ class SCRN(COptimizer):
                     p.data += delta
                 cnt += 1
 
-        self.check_delta_m(delta_ms, grad)
+        # self.check_delta_m(delta_ms, grad)
 
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
 
