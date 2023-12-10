@@ -98,10 +98,10 @@ if __name__ == "__main__":
 
     # Perform cross-validation to find the best hyperparameters
     best_lr, best_opt, best_num_layers, best_conv_number = cross_validation(lrs, optimizers_, num_layers,
-                                                                                        conv_numbers,
-                                                                                        dataloader, val_dataloader,
-                                                                                        test_dataloader, input_shape,
-                                                                                        n_class, device=device,
-                                                                                        args=args, verbose=args.verbose)
+                                                                            conv_numbers,
+                                                                            dataloader, val_dataloader,
+                                                                            test_dataloader, input_shape,
+                                                                            n_class, device=device,
+                                                                            args=args, verbose=args.verbose)
     print(f"Best learning rate: {best_lr}, best optimizer: {best_opt}, best number of layers: {best_num_layers},",
           f"best number of convolutional layers: {best_conv_number}")
