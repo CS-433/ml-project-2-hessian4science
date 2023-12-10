@@ -237,7 +237,7 @@ class SCRN(COptimizer):
         self.mask = np.ones(len([p.grad for group in self.param_groups for p in group['params']]), dtype=bool)
 
     def check_delta_m(self, delta_ms, grad):
-        val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))
+        val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho)).to(self.device)
         if torch.any(delta_ms >= val):
             deltas = self.cubic_final(self.eps, grad)
             cnt = 0
