@@ -153,8 +153,7 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
             f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
         torch.cuda.empty_cache()
         gc.collect()
-        if verbose:
-            print(torch.cuda.memory_summary(device=device))
+
     pbar.close()
 
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
@@ -234,12 +233,18 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     if args.save:
                         torch.save(model.state_dict(),
                                    os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
+                    model.zero_grad()
                     del model
                     torch.cuda.empty_cache()
                     gc.collect()
+                    torch.cuda.reset_max_memory_allocated()
+                    torch.cuda.reset_accumulated_memory_stats()
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
-                        print(torch.cuda.memory_summary(device=device))
+                        print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
+                        print(f"memory_reserved: {torch.cuda.memory_reserved(device=device) / 1024 ** 3} GB")
+
+
 
                 if args.plot:
                     n_train = len(train_acc_history_list[0])
