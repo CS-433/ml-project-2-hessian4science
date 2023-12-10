@@ -238,6 +238,7 @@ class SCRN(COptimizer):
 
     def check_delta_m(self, delta_ms, grad):
         val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho)).to(self.device)
+        delta_ms = torch.tensor(delta_ms).to(self.device)
         if torch.any(delta_ms >= val):
             deltas = self.cubic_final(self.eps, grad)
             cnt = 0
