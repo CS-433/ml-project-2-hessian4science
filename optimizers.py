@@ -236,73 +236,88 @@ class SCRN(COptimizer):
         self.name = 'SCRN'
         self.mask = np.ones(len([p.grad for group in self.param_groups for p in group['params']]), dtype=bool)
 
-    def check_delta_m(self, p, delta_m, g):
-        if delta_m >= (-1 / 100) * np.sqrt(self.eps ** 3 / self.rho):
-            delta = self.cubic_final(p, self.eps, g)
-            return delta
-        return None
+    def check_delta_m(self, delta_ms, grad):
+        if np.any(delta_ms >= (-1 / 100) * np.sqrt(self.eps ** 3 / self.rho)):
+            deltas = self.cubic_final(self.eps, grad)
+            cnt = 0
+            for group in self.param_groups:
+                for p, delta in zip(group["params"], deltas):
+                    if self.mask[cnt] and delta_ms[cnt] >= (-1 / 100) * np.sqrt(self.eps ** 3 / self.rho):
+                        p.data += delta
+                        self.mask[cnt] = False
+                    cnt += 1
 
     def step(self, **kwargs):
         self.l_ = 1 / (20 * self.lr)
         cnt = 0
+        grad = [p.grad for group in self.param_groups for p in group['params']]
+        deltas, delta_ms = self.cubic_regularization(self.eps, grad)
+
         for group in self.param_groups:
-            for p in group["params"]:
+            for p, delta in zip(group["params"], deltas):
                 if self.mask[cnt]:
-                    g = p.grad
-                    delta, delta_m = self.cubic_regularization(p, self.eps, g)
                     p.data += delta
-                    d = self.check_delta_m(p, delta_m, g)
-                    if d is not None:
-                        p.data += d
-                        self.mask[cnt] = False
                 cnt += 1
+
+        self.check_delta_m(delta_ms, grad)
 
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
 
-    def cubic_final(self, p, eps, g):
+    def cubic_final(self, eps, grad):
         # ∆ ← 0, g_m ← g, mu ← 1/(20l)
-        delta = torch.zeros(g.size()).to(self.device)
-        g_m = g
+        delta = [torch.zeros(g.size()).to(self.device) for g in grad]
+        grad_m = grad
         mu = 1.0 / (20.0 * self.l_)
-        while torch.norm(g_m).item() >= eps / 2:
-            delta -= mu * g_m
+        grad_norm = [torch.norm(g).item() for g in grad]
 
-            hdp = hvp(self.f, p, delta)[1]
+        while np.sum(grad_norm) >= eps / 2:
+            delta = [d - mu * g for g, d in zip(grad_m, delta)]
+
+            hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
+                      tuple(delta))[1]
 
             # g_m ← g + B[∆] + ρ/2||∆||
-            g_m = g + hdp + self.rho / 2 * torch.norm(delta) * delta
+            grad_m = [(g + h + self.rho / 2 * torch.norm(d) * d) for g, d, h in zip(grad, delta, hdp)]
+            grad_norm = [torch.norm(g).item() for g in grad_m]
+
         return delta
 
-    def cubic_regularization(self, p, eps, g):
-        a = torch.norm(g).item()
+    def cubic_regularization(self, eps, grad):
+        g_norm = [torch.norm(g) for g in grad]
+        a = sum(g_norm)
         if a >= ((self.l_ ** 2) / self.rho):
             # B[g]
-            hgp = hvp(self.f, p, p.grad)[1]
+            hgp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
+                      tuple(p.grad for group in self.param_groups for p in group['params']))[1]
             # (gT B[g]) / (ρ||g||2)
-            temp = g.reshape(-1) @ hgp.reshape(-1) / self.rho / a ** 2
+            temp = [g.reshape(-1) @ h.reshape(-1) / self.rho / (a ** 2) for g, h in zip(grad, hgp)]
 
             # -temp + sqrt(temp^2 + 2 ||g_norm||/ρ)
-            R_c = (-temp + torch.sqrt(temp.pow(2) + 2 * a / self.rho))
+            R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
 
             # ∆ ← −Rc g/||g||
-            delta = -R_c * g / a
+            delta = [-r * g / a for r, g in zip(R_c, grad)]
         else:
             # ∆ ← 0, σ ← c sqrt(ρε)/l, mu ← 1/(20l)
-            delta = torch.zeros(g.size()).to(self.device)
+            delta = [torch.zeros(g.size()).to(self.device) for g in grad]
             sigma = self.c_ * (eps * self.rho) ** 0.5 / self.l_
             mu = 1.0 / (20.0 * self.l_)
             # v ← random vector in R^d in uniform distribution
-            vec = (torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device)
-            vec = vec / torch.norm(vec)
+            vec = [(torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device) for g in grad]
+            vec = [v / torch.norm(v) for v in vec]
             # g_ ← g + σv
-            g_ = g + sigma * vec
+            g_ = [g + sigma * v for g, v in zip(grad, vec)]
             for _ in range(self.T_eps):
                 # B[∆]
-                hdp = hvp(self.f, p, delta)[1]
+                hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
+                          tuple(delta))[1]
                 # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
-                delta = (delta - mu * (g_ + hdp + self.rho / 2 * torch.norm(delta) * delta))
-        hdp = hvp(self.f, p, delta)[1]
-        delta_m = g * delta + 1 / 2 * delta.T * hdp + self.rho / 6 * torch.pow(torch.norm(delta), 3)
+                delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
+
+        hdp = hvp(self.f, tuple(p for group in self.param_groups for p in group['params']),
+                  tuple(delta))[1]
+        delta_m = [torch.sum(g * d) + torch.sum(1 / 2 * d * h) + self.rho / 6 * torch.pow(torch.norm(d), 3) for g, d, h
+                   in zip(grad, delta, hdp)]
 
         return delta, delta_m
 
@@ -317,15 +332,14 @@ class SCRN_Momentum(SCRN):
     def step(self, **kwargs):
         self.l_ = 1 / (20 * self.lr)
         cnt = 0
+        grad = [p.grad for group in self.param_groups for p in group['params']]
+        deltas, delta_ms = self.cubic_regularization(self.eps, grad)
+        self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
+
         for group in self.param_groups:
-            for p in group["params"]:
+            for p, delta in zip(group["params"], self.old_delta):
                 if self.mask[cnt]:
-                    g = p.grad
-                    delta, delta_m = self.cubic_regularization(p, self.eps, g)
-                    self.old_delta[cnt] = self.momentum * self.old_delta[cnt] + delta
-                    p.data += self.old_delta[cnt]
-                    d = self.check_delta_m(p, delta_m, g)
-                    if d is not None:
-                        p.data += d
-                        self.mask[cnt] = False
+                    p.data += delta
                 cnt += 1
+
+        self.check_delta_m(delta_ms, grad)
