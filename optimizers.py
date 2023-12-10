@@ -234,7 +234,7 @@ class SCRN(COptimizer):
         self.has_f = True
         self.log = []
         self.name = 'SCRN'
-        self.mask = np.zeros(len([p.grad for group in self.param_groups for p in group['params']]), dtype=bool)
+        self.mask = np.ones(len([p.grad for group in self.param_groups for p in group['params']]), dtype=bool)
 
     def check_delta_m(self, p, delta_m, g):
         if delta_m >= (-1 / 100) * np.sqrt(self.eps ** 3 / self.rho):
