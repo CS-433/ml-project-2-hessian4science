@@ -97,7 +97,7 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     # Perform cross-validation to find the best hyperparameters
-    best_lr, best_opt, best_num_layers, best_conv_number, best_model = cross_validation(lrs, optimizers_, num_layers,
+    best_lr, best_opt, best_num_layers, best_conv_number = cross_validation(lrs, optimizers_, num_layers,
                                                                                         conv_numbers,
                                                                                         dataloader, val_dataloader,
                                                                                         test_dataloader, input_shape,

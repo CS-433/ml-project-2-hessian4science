@@ -1,3 +1,4 @@
+import gc
 import os
 
 import numpy as np
@@ -151,6 +152,7 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
         pbar.set_description_str(
             f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
         torch.cuda.empty_cache()
+        gc.collect()
     pbar.close()
 
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
@@ -180,7 +182,6 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
     best_opt = None
     best_num_layers = 0
     best_conv_number = 0
-    best_model = None
     save_path = os.path.join(args.save_path, f"{args.dataset}/")
     os.makedirs(save_path, exist_ok=True)
     criterion = nn.CrossEntropyLoss()
@@ -228,12 +229,14 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                         best_opt = opt
                         best_num_layers = num_layer
                         best_conv_number = conv_number
-                        best_model = model
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                     if args.save:
                         torch.save(model.state_dict(),
                                    os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
+                    del model
+                    torch.cuda.empty_cache()
+                    gc.collect()
 
                 if args.plot:
                     n_train = len(train_acc_history_list[0])
@@ -280,4 +283,4 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.savefig(os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
-    return best_lr, best_opt, best_num_layers, best_conv_number, best_model
+    return best_lr, best_opt, best_num_layers, best_conv_number
