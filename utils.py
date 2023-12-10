@@ -4,7 +4,6 @@ import os
 import numpy as np
 import torch
 from torch import nn
-from numba import cuda
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -106,7 +105,8 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
     return total_loss / total, total_accuracy / total, lr
 
 
-def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, device="cpu", verbose=True, with_scheduler=True):
+def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, device="cpu", verbose=True,
+          with_scheduler=True):
     """
     Train a model
     :param model: model to train
@@ -235,18 +235,13 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                                    os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
                     model.zero_grad()
                     del model
+                    del optimizer
                     gc.collect()
-                    if device == 'cuda':
-                        torch.cuda.empty_cache()
-                        cuda.select_device(0)
-                        cuda.close()
-                        cuda.select_device(0)
+                    torch.cuda.empty_cache()
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                         print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
                         print(f"memory_reserved: {torch.cuda.memory_reserved(device=device) / 1024 ** 3} GB")
-
-
 
                 if args.plot:
                     n_train = len(train_acc_history_list[0])
@@ -258,7 +253,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Accuracy")
-                    plt.savefig(os.path.join(save_path, f"training_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
+                    plt.savefig(
+                        os.path.join(save_path, f"training_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -266,7 +262,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Loss")
-                    plt.savefig(os.path.join(save_path, f"loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
+                    plt.savefig(
+                        os.path.join(save_path, f"loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -274,7 +271,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Learning Rate")
-                    plt.savefig(os.path.join(save_path, f"lr_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
+                    plt.savefig(
+                        os.path.join(save_path, f"lr_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -282,7 +280,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Accuracy")
-                    plt.savefig(os.path.join(save_path, f"val_acc_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
+                    plt.savefig(
+                        os.path.join(save_path, f"val_acc_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
                     for i, opt in enumerate(optimizers_):
@@ -290,7 +289,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     plt.legend()
                     plt.xlabel("Epoch")
                     plt.ylabel("Loss")
-                    plt.savefig(os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
+                    plt.savefig(
+                        os.path.join(save_path, f"val_loss_curves_{lr}_{num_layer}_{conv_number}_{args.scheduler}.png"))
                     plt.close()
 
     return best_lr, best_opt, best_num_layers, best_conv_number
