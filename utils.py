@@ -3,8 +3,8 @@ import os
 
 import numpy as np
 import torch
-from torch import nn, autocast
-from torch.cuda.amp import GradScaler
+from torch import nn
+from numba import cuda
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -235,10 +235,11 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                                    os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
                     model.zero_grad()
                     del model
-                    torch.cuda.empty_cache()
                     gc.collect()
-                    torch.cuda.reset_max_memory_allocated()
-                    torch.cuda.reset_accumulated_memory_stats()
+                    if device == 'cuda':
+                        torch.cuda.empty_cache()
+                        cuda.select_device(0)
+                        cuda.close()
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                         print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
