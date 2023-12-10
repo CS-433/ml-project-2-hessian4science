@@ -240,6 +240,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                         torch.cuda.empty_cache()
                         cuda.select_device(0)
                         cuda.close()
+                        cuda.select_device(0)
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                         print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
