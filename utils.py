@@ -236,8 +236,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                     model.zero_grad()
                     del model
                     del optimizer
-                    gc.collect()
                     torch.cuda.empty_cache()
+                    gc.collect()
                     if verbose:
                         print(f"Test Acc for {opt}: {test_acc:0.2f}%")
                         print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
