@@ -253,7 +253,6 @@ class SCRN(COptimizer):
         torch._foreach_addcmul_(data, deltas, delta_ms)
         torch._foreach_neg_(delta_ms)
         torch._foreach_add_(self.mask, delta_ms)
-        print('mask: ', self.mask)
     @torch.no_grad()
     def step(self, **kwargs):
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
@@ -307,7 +306,6 @@ class SCRN(COptimizer):
             # torch._foreach_add_(a, 1)
             # torch._foreach_div_(a, 2)
             a = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in a]
-            print('a: ', a)
             torch._foreach_mul_(norms, a)
             a = torch.max(torch.stack(norms))
 
@@ -326,7 +324,6 @@ class SCRN(COptimizer):
         # torch._foreach_add_(a_mask, 1)
         # torch._foreach_div_(a_mask, 2)
         a_mask = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in a_mask]
-        print('a_mask: ', a_mask)
         torch._foreach_add_(a, a_mask)
 
         # if a >= ((self.l_ ** 2) / self.rho):
