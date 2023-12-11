@@ -2,6 +2,7 @@ from torch.autograd.functional import hvp
 from torch.optim import Optimizer
 import torch
 import numpy as np
+from torch.optim.optimizer import _use_grad_for_differentiable
 
 
 ##################
@@ -218,13 +219,14 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_eps=10, lr=0.05,
+    def __init__(self, params, T_out=10, T_eps=10, lr=0.05,
                  rho=1, c_=1, eps=1e-2):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        defaults = dict(T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
+        defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
         self.hes = None
         self.T_eps = T_eps
+        self.T_out = T_out
         self.l_ = 1 / (20 * lr)
         self.lr = lr
         self.rho = rho
@@ -235,15 +237,14 @@ class SCRN(COptimizer):
         self.has_f = True
         self.log = []
         self.name = 'SCRN'
-        self.mask = [torch.tensor(1, dtype=torch.int8).to(self.device) for group in self.param_groups for _ in group['params']]
-
+        self.mask = None
     def check_delta_m(self, param, delta_ms, grad, data):
         val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho)).to(self.device)
         torch._foreach_sub_(delta_ms, val)
         torch._foreach_sign_(delta_ms)
-        delta_ms = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
-        # torch._foreach_add_(delta_ms, 1)
-        # torch._foreach_div_(delta_ms, 2)
+        # delta_ms = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+        torch._foreach_add_(delta_ms, 1)
+        torch._foreach_div_(delta_ms, 2)
         delta_ms = torch._foreach_mul(self.mask, delta_ms)
         deltas = self.cubic_final(param, self.eps, grad, delta_ms)
         torch._foreach_addcmul_(data, deltas, delta_ms)
@@ -252,21 +253,25 @@ class SCRN(COptimizer):
 
     @torch.no_grad()
     def step(self, **kwargs):
+        self.mask = [torch.tensor(1.0).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
-        grad = [p.grad if p.grad is not None else torch.zeros(p.data.shape) for p in param]
         data = [p.data for p in param]
-        deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
+        grad = [p.grad if p.grad is not None else torch.zeros(p.data.shape) for p in param]
+        for iter in range(self.T_out):
+            deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
 
-        # for group in self.param_groups:
-        #     for p, delta in zip(group["params"], deltas):
-        #         if self.mask[cnt]:
-        #             p.data += delta
-        #         cnt += 1
-        torch._foreach_mul_(deltas, self.mask)
+            # for group in self.param_groups:
+            #     for p, delta in zip(group["params"], deltas):
+            #         if self.mask[cnt]:
+            #             p.data += delta
+            #         cnt += 1
+            torch._foreach_mul_(deltas, self.mask)
 
-        torch._foreach_add_(data, deltas)
-        self.check_delta_m(param, delta_ms, grad, data)
+            torch._foreach_add_(data, deltas)
+            self.check_delta_m(param, delta_ms, grad, data)
+            if all(m < 0.5 for m in self.mask):
+                break
 
     # Algorithm 4 Cubic-Subsolver via Gradient Descent
 
@@ -296,7 +301,9 @@ class SCRN(COptimizer):
             norms = torch._foreach_norm(grad_m)
             a = torch._foreach_sub(norms, eps / 2)
             torch._foreach_sign_(a)
-            a = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in a]
+            torch._foreach_add_(a, 1)
+            torch._foreach_div_(a, 2)
+            # a = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in a]
             torch._foreach_mul_(norms, a)
             a = torch.max(torch.stack(norms))
 
@@ -312,7 +319,9 @@ class SCRN(COptimizer):
         a_mask = torch._foreach_sub(a, ((self.l_ ** 2) / self.rho))
         torch._foreach_neg_(a_mask)
         torch._foreach_sign_(a_mask)
-        a_mask = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in a_mask]
+        torch._foreach_add_(a_mask, 1)
+        torch._foreach_div_(a_mask, 2)
+        # a_mask = [torch.tensor(1 if t == 1 else 0, dtype=torch.int8).to(self.device) for t in a_mask]
         torch._foreach_add_(a, a_mask)
 
         # if a >= ((self.l_ ** 2) / self.rho):
@@ -390,25 +399,29 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
-        super(SCRN_Momentum, self).__init__(params, T_eps, lr, rho, c_, eps)
+    def __init__(self, params, T_out=10, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+        super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
         self.momentum = momentum
 
     @torch.no_grad()
     def step(self, **kwargs):
+        self.mask = [torch.tensor(1.0).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
         grad = [p.grad if p.grad is not None else torch.zeros(p.data.shape) for p in param]
         data = [p.data for p in param]
-        deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
-        # self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
-        torch._foreach_mul_(self.old_delta, self.momentum)
-        torch._foreach_add_(self.old_delta, deltas)
-        torch._foreach_add_(data, torch._foreach_mul(self.old_delta, self.mask))
+        for iter in range(self.T_out):
+            deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
+            # self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
+            torch._foreach_mul_(self.old_delta, self.momentum)
+            torch._foreach_add_(self.old_delta, deltas)
+            torch._foreach_addcmul_(data, self.old_delta, self.mask)
 
-        self.check_delta_m(param, delta_ms, grad, data)
+            self.check_delta_m(param, delta_ms, grad, data)
+            if all(m < 0.5 for m in self.mask):
+                break
 
 class LBFGS(torch.optim.LBFGS):
     def __init__(self, *args, **kwargs):
