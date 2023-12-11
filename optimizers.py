@@ -219,7 +219,7 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_out=3, T_eps=3, lr=0.05,
+    def __init__(self, params, T_out=2, T_eps=10, lr=0.05,
                  rho=1, c_=1, eps=1e-2):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
@@ -401,7 +401,7 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=3, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+    def __init__(self, params, T_out=2, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
