@@ -22,10 +22,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", default="2", help="The list of numbers of layers in the model.")
     parser.add_argument("--conv_number", default="1", help="The list of numbers of convolutional layers in the model.")
     parser.add_argument("--batch_size", default=256, type=int, help="The batch size for training.")
-    parser.add_argument("--epochs", default=1, type=int, help="The number of epochs to train for.")
+    parser.add_argument("--epochs", default=2, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
-    parser.add_argument("--lr", default="0.1", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="SCRN,SCRN_Momentum",
+    parser.add_argument("--lr", default="0.1,0.001", help="The list of learning rates for the optimizers.")
+    parser.add_argument("--optimizer", default="Adam,SGD",
                         help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
@@ -97,11 +97,9 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     # Perform cross-validation to find the best hyperparameters
-    best_lr, best_opt, best_num_layers, best_conv_number = cross_validation(lrs, optimizers_, num_layers,
-                                                                            conv_numbers,
-                                                                            dataloader, val_dataloader,
-                                                                            test_dataloader, input_shape,
-                                                                            n_class, device=device,
-                                                                            args=args, verbose=args.verbose)
-    print(f"Best learning rate: {best_lr}, best optimizer: {best_opt}, best number of layers: {best_num_layers},",
-          f"best number of convolutional layers: {best_conv_number}")
+    cross_validation(lrs, optimizers_, num_layers,
+                     conv_numbers,
+                     dataloader, val_dataloader,
+                     test_dataloader, input_shape,
+                     n_class, device=device,
+                     args=args, verbose=args.verbose)
