@@ -10,6 +10,7 @@ from torch.optim.optimizer import _use_grad_for_differentiable
 ##################
 
 class Adam(torch.optim.Adam):
+    name = 'Adam'
     def __init__(self, *args, **kwargs):
         super(Adam, self).__init__(*args, **kwargs)
 
@@ -21,6 +22,7 @@ class Adam(torch.optim.Adam):
 
 
 class SGD(torch.optim.SGD):
+    name = 'SGD'
     def __init__(self, *args, **kwargs):
         super(SGD, self).__init__(*args, **kwargs)
 
@@ -32,6 +34,7 @@ class SGD(torch.optim.SGD):
 
 
 class COptimizer(Optimizer):
+    name = 'COptimizer'
     def __init__(self, *args, **kwargs):
         self.f = None
         self.has_f = False
@@ -219,8 +222,8 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_out=2, T_eps=10, lr=0.05,
-                 rho=1, c_=1, eps=1e-2):
+    def __init__(self, params, T_out=3, T_eps=10, lr=0.05,
+                 rho=1, c_=1, eps=1e-9):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
@@ -401,7 +404,7 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=2, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+    def __init__(self, params, T_out=3, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
@@ -426,6 +429,7 @@ class SCRN_Momentum(SCRN):
                 break
 
 class LBFGS(torch.optim.LBFGS):
+    name = 'LBFGS'
     def __init__(self, *args, **kwargs):
         super(LBFGS, self).__init__(*args, **kwargs)
 
