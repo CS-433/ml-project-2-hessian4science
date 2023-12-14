@@ -166,11 +166,11 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
     return train_acc_history, train_loss_history, val_acc_history, val_loss_history, lr_history
 
 
-def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
-                     dataloader, val_dataloader, test_dataloader, input_shape, n_class, device='cpu', args=None,
-                     verbose=True):
+def model_selection(lrs, optimizers_, num_layers, conv_numbers,
+                    dataloader, val_dataloader, test_dataloader, input_shape, n_class, device='cpu', args=None,
+                    verbose=True):
     """
-        Cross validation for the best hyperparameters
+        Model selection for the best hyperparameters
         :param lrs: list of learning rates
         :param optimizers_: list of optimizers
         :param num_layers: list of number of layers
@@ -198,7 +198,7 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
             lr_history_list = []
 
             for opt in optimizers_:
-                best_acc = 0
+                best_loss = np.inf
                 best_lr = 0
                 best_train_acc_history = []
                 best_train_loss_history = []
@@ -231,8 +231,8 @@ def cross_validation(lrs, optimizers_, num_layers, conv_numbers,
                         torch.save(model.state_dict(),
                                    os.path.join(save_path, f"{lr}_{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
 
-                    if val_acc_history[-1] > best_acc:
-                        best_acc = val_acc_history[-1]
+                    if val_loss_history[-1] < best_loss:
+                        best_loss = val_acc_history[-1]
                         best_lr = lr
                         best_train_acc_history = train_acc_history
                         best_train_loss_history = train_loss_history

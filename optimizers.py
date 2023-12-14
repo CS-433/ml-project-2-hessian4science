@@ -222,8 +222,8 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_out=3, T_eps=10, lr=0.05,
-                 rho=1, c_=1, eps=1e-9):
+    def __init__(self, params, T_out=2, T_eps=15, lr=0.05,
+                 rho=1, c_=1, eps=1e-6):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
@@ -241,21 +241,16 @@ class SCRN(COptimizer):
         self.log = []
         self.name = 'SCRN'
         self.mask = None
+        self.val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho)).to(self.device)
     def check_delta_m(self, param, delta_ms, grad, data):
-        val = (-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho)).to(self.device)
-        torch._foreach_sub_(delta_ms, val)
-        # torch._foreach_mul_(delta_ms, 1000000)
-        # print(delta_ms)
-        # torch._foreach_sign_(delta_ms)
-        # print(delta_ms)
-        # torch._foreach_add_(delta_ms, 1)
-        # torch._foreach_div_(delta_ms, 2)
+        torch._foreach_sub_(delta_ms, self.val)
         delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
         delta_ms = torch._foreach_mul(self.mask, delta_ms)
-        deltas = self.cubic_final(param, self.eps, grad, delta_ms)
-        torch._foreach_addcmul_(data, deltas, delta_ms)
-        torch._foreach_neg_(delta_ms)
-        torch._foreach_add_(self.mask, delta_ms)
+        if any(delta_ms):
+            deltas = self.cubic_final(param, self.eps, grad, delta_ms)
+            torch._foreach_addcmul_(data, deltas, delta_ms)
+            torch._foreach_neg_(delta_ms)
+            torch._foreach_add_(self.mask, delta_ms)
     @torch.no_grad()
     def step(self, **kwargs):
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
@@ -327,67 +322,73 @@ class SCRN(COptimizer):
         # torch._foreach_add_(a_mask, 1)
         # torch._foreach_div_(a_mask, 2)
         a_mask = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in a_mask]
-        torch._foreach_add_(a, a_mask)
+        m1 = any(a_mask)
+        m2 = not all(a_mask)
+        if m1:
+            torch._foreach_add_(a, a_mask)
 
-        # if a >= ((self.l_ ** 2) / self.rho):
-            # B[g]
-        hgp = hvp(self.f, tuple(param), tuple(grad))[1]
-        # (gT B[g]) / (ρ||g||2)
-        # temp = [g.reshape(-1) @ h.reshape(-1) / self.rho / (a ** 2) for g, h in zip(grad, hgp)]
-        torch._foreach_mul_(hgp, grad)
-        hgp = [t.sum() for t in hgp]
-        a_pow = torch._foreach_pow(a, 2)
-        # epsilon = 1e-10
-        # torch._foreach_add(a_pow, epsilon)
-        torch._foreach_mul_(a_pow, - self.rho)
-        torch._foreach_div_(hgp, a_pow)
-        # -temp + sqrt(temp^2 + 2 ||g_norm||/ρ)
-        # R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
-        hgp_pow = torch._foreach_pow(hgp, 2)
-        a_rho = torch._foreach_mul(a, 2 / self.rho)
-        torch._foreach_add_(hgp_pow, a_rho)
-        torch._foreach_sqrt_(hgp_pow)
-        torch._foreach_add_(hgp, hgp_pow)
-        # ∆ ← −Rc g/||g||
-        # delta = [-r * g / a for r, g in zip(R_c, grad)]
-        torch._foreach_div_(hgp, torch._foreach_neg(a))
-        delta1 = torch._foreach_mul(grad, hgp)
+            # if a >= ((self.l_ ** 2) / self.rho):
+                # B[g]
+            hgp = hvp(self.f, tuple(param), tuple(grad))[1]
+            # (gT B[g]) / (ρ||g||2)
+            # temp = [g.reshape(-1) @ h.reshape(-1) / self.rho / (a ** 2) for g, h in zip(grad, hgp)]
+            torch._foreach_mul_(hgp, grad)
+            hgp = [t.sum() for t in hgp]
+            a_pow = torch._foreach_pow(a, 2)
+            # epsilon = 1e-10
+            # torch._foreach_add(a_pow, epsilon)
+            torch._foreach_mul_(a_pow, - self.rho)
+            torch._foreach_div_(hgp, a_pow)
+            # -temp + sqrt(temp^2 + 2 ||g_norm||/ρ)
+            # R_c = [(-t + torch.sqrt(t.pow(2) + 2 * a / self.rho)) for t in temp]
+            hgp_pow = torch._foreach_pow(hgp, 2)
+            a_rho = torch._foreach_mul(a, 2 / self.rho)
+            torch._foreach_add_(hgp_pow, a_rho)
+            torch._foreach_sqrt_(hgp_pow)
+            torch._foreach_add_(hgp, hgp_pow)
+            # ∆ ← −Rc g/||g||
+            # delta = [-r * g / a for r, g in zip(R_c, grad)]
+            torch._foreach_div_(hgp, torch._foreach_neg(a))
+            delta1 = torch._foreach_mul(grad, hgp)
 
         # ****************
-        # ∆ ← 0, σ ← c sqrt(ρε)/l, mu ← 1/(20l)
-        delta = [torch.zeros(g.size()).to(self.device) for g in grad]
-        # delta = torch._foreach_zeros(grad)
+        if m2:
+            # ∆ ← 0, σ ← c sqrt(ρε)/l, mu ← 1/(20l)
+            delta = [torch.zeros(g.size()).to(self.device) for g in grad]
+            # delta = torch._foreach_zeros(grad)
 
-        sigma = self.c_ * (eps * self.rho) ** 0.5 / self.l_
-        mu = 1.0 / (20.0 * self.l_)
-        # v ← random vector in R^d in uniform distribution
-        vec = [torch.rand(g.size()).to(self.device) for g in grad]
-        torch._foreach_pow_(vec, 2)
-        torch._foreach_add_(vec, 1)
-        torch._foreach_div_(vec, torch._foreach_norm(vec))
-        # vec = [(torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device) for g in grad]
-        # vec = [v / torch.norm(v) for v in vec]
-        # g_ ← g + σv
-        # g_ = [g + sigma * v for g, v in zip(grad, vec)]
-        torch._foreach_mul_(vec, sigma)
-        torch._foreach_add_(vec, grad)
-        for _ in range(self.T_eps):
-            # B[∆]
-            hdp = hvp(self.f, tuple(param), tuple(delta))[1]
-            # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
-            # delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
-            torch._foreach_add_(hdp, vec)
-            tmp = torch._foreach_norm(delta)
-            torch._foreach_mul_(tmp, self.rho / 2)
-            torch._foreach_addcmul_(hdp, delta, tmp)
-            torch._foreach_mul_(hdp, -mu)
-            torch._foreach_add_(delta, hdp)
-
-        torch._foreach_mul_(delta, a_mask)
-        torch._foreach_sub_(a_mask, 1)
-        torch._foreach_neg_(a_mask)
-        torch._foreach_mul_(delta1, a_mask)
-        torch._foreach_add_(delta, delta1)
+            sigma = self.c_ * (eps * self.rho) ** 0.5 / self.l_
+            mu = 1.0 / (20.0 * self.l_)
+            # v ← random vector in R^d in uniform distribution
+            vec = [torch.rand(g.size()).to(self.device) for g in grad]
+            torch._foreach_pow_(vec, 2)
+            torch._foreach_add_(vec, 1)
+            torch._foreach_div_(vec, torch._foreach_norm(vec))
+            # vec = [(torch.rand(g.size()) * 2 + torch.ones(g.size())).to(self.device) for g in grad]
+            # vec = [v / torch.norm(v) for v in vec]
+            # g_ ← g + σv
+            # g_ = [g + sigma * v for g, v in zip(grad, vec)]
+            torch._foreach_mul_(vec, sigma)
+            torch._foreach_add_(vec, grad)
+            for _ in range(self.T_eps):
+                # B[∆]
+                hdp = hvp(self.f, tuple(param), tuple(delta))[1]
+                # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
+                # delta = [(d - mu * (g + h + self.rho / 2 * torch.norm(d) * d)) for g, d, h in zip(g_, delta, hdp)]
+                torch._foreach_add_(hdp, vec)
+                tmp = torch._foreach_norm(delta)
+                torch._foreach_mul_(tmp, self.rho / 2)
+                torch._foreach_addcmul_(hdp, delta, tmp)
+                torch._foreach_mul_(hdp, -mu)
+                torch._foreach_add_(delta, hdp)
+        if m1 and m2:
+            torch._foreach_mul_(delta, a_mask)
+            torch._foreach_sub_(a_mask, 1)
+            torch._foreach_neg_(a_mask)
+            torch._foreach_mul_(delta1, a_mask)
+            torch._foreach_add_(delta, delta1)
+        elif m1:
+            delta = delta1
         hdp = hvp(self.f, tuple(param), tuple(delta))[1]
         # delta_m = [torch.sum(g * d) + torch.sum(1 / 2 * d * h) + self.rho / 6 * torch.pow(torch.norm(d), 3) for g, d, h
         #            in zip(grad, delta, hdp)]
@@ -419,12 +420,18 @@ class SCRN_Momentum(SCRN):
         data = [p.data for p in param]
         for iter in range(self.T_out):
             deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
-            # self.old_delta = [d1 * self.momentum + d2 for d1, d2 in zip(self.old_delta, deltas)]
             torch._foreach_mul_(self.old_delta, self.momentum)
-            torch._foreach_add_(self.old_delta, deltas)
+            torch._foreach_add_(self.old_delta, deltas, self.mask)
             torch._foreach_addcmul_(data, self.old_delta, self.mask)
 
-            self.check_delta_m(param, delta_ms, grad, data)
+            torch._foreach_sub_(delta_ms, self.val)
+            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+            delta_ms = torch._foreach_mul(self.mask, delta_ms)
+            if any(delta_ms):
+                deltas = self.cubic_final(param, self.eps, grad, delta_ms)
+                torch._foreach_addcmul_(data, deltas, delta_ms)
+                torch._foreach_neg_(delta_ms)
+                torch._foreach_add_(self.mask, delta_ms)
             if all(m < 0.5 for m in self.mask):
                 break
 
