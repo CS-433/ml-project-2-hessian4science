@@ -222,7 +222,7 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_out=2, T_eps=15, lr=0.05,
+    def __init__(self, params, T_out=4, T_eps=7, lr=0.05,
                  rho=1, c_=1, eps=1e-6):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
