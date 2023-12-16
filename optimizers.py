@@ -11,6 +11,7 @@ from torch.optim.optimizer import _use_grad_for_differentiable
 
 class Adam(torch.optim.Adam):
     name = 'Adam'
+
     def __init__(self, *args, **kwargs):
         super(Adam, self).__init__(*args, **kwargs)
 
@@ -23,6 +24,7 @@ class Adam(torch.optim.Adam):
 
 class SGD(torch.optim.SGD):
     name = 'SGD'
+
     def __init__(self, *args, **kwargs):
         super(SGD, self).__init__(*args, **kwargs)
 
@@ -35,6 +37,7 @@ class SGD(torch.optim.SGD):
 
 class COptimizer(Optimizer):
     name = 'COptimizer'
+
     def __init__(self, *args, **kwargs):
         self.f = None
         self.has_f = False
@@ -223,7 +226,7 @@ class HVP_RVR(COptimizer):
 
 class SCRN(COptimizer):
     def __init__(self, params, T_out=1, T_eps=10, lr=0.05,
-                 rho=1, c_=1, eps=1e-6):
+                 rho=1, c_=1, eps=1):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
@@ -241,7 +244,9 @@ class SCRN(COptimizer):
         self.log = []
         self.name = 'SCRN'
         self.mask = None
+        self.t = 100
         self.val = ((-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))).to(self.device)
+
     @torch.no_grad()
     def step(self, **kwargs):
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
@@ -268,7 +273,6 @@ class SCRN(COptimizer):
             if all(m < 0.5 for m in self.mask):
                 break
 
-
     def cubic_final(self, param, eps, grad, delta_ms):
         # ∆ ← 0, g_m ← g, mu ← 1/(20l)
         delta = [torch.zeros(g.size()).to(self.device) for g in grad]
@@ -278,8 +282,9 @@ class SCRN(COptimizer):
         a = torch._foreach_norm(grad_m)
         torch._foreach_mul_(a, delta_ms)
         a = torch.max(torch.stack(a))
-
-        while a > eps / 2:
+        t = self.t
+        while t > 0 and a > eps / 2:
+            t -= 1
             torch._foreach_mul_(grad_m, -mu)
             torch._foreach_addcmul_(delta, grad_m, delta_ms)
             grad_m = vhp(self.f, tuple(param), tuple(delta))[1]
@@ -383,7 +388,7 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
@@ -428,8 +433,10 @@ class SCRN_Momentum(SCRN):
             if all(m < 0.5 for m in self.mask):
                 break
 
+
 class LBFGS(torch.optim.LBFGS):
     name = 'LBFGS'
+
     def __init__(self, *args, **kwargs):
         super(LBFGS, self).__init__(*args, **kwargs)
 
