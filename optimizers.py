@@ -1,4 +1,4 @@
-from torch.autograd.functional import hvp
+from torch.autograd.functional import vhp
 from torch.optim import Optimizer
 import torch
 import numpy as np
@@ -192,7 +192,7 @@ class HVP_RVR(COptimizer):
             g = g_prev
             for i in range(1, int(K)):
                 a = [(i / K) * x1 + (1 - i / K) * x2 for x1, x2 in zip(x, x_prev)]
-                h = hvp(self.f, tuple(b), tuple((x1 - x2) for x1, x2 in zip(a, b)))[1]
+                h = vhp(self.f, tuple(b), tuple((x1 - x2) for x1, x2 in zip(a, b)))[1]
                 g = [g1 + h1 for g1, h1 in zip(g, h)]
                 b = a
             return g
@@ -222,7 +222,7 @@ class HVP_RVR(COptimizer):
 
 
 class SCRN(COptimizer):
-    def __init__(self, params, T_out=4, T_eps=7, lr=0.05,
+    def __init__(self, params, T_out=1, T_eps=10, lr=0.05,
                  rho=1, c_=1, eps=1e-6):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
@@ -242,58 +242,62 @@ class SCRN(COptimizer):
         self.name = 'SCRN'
         self.mask = None
         self.val = ((-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))).to(self.device)
-    def check_delta_m(self, param, delta_ms, grad, data):
-        torch._foreach_sub_(delta_ms, self.val)
-        delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
-        delta_ms = torch._foreach_mul(self.mask, delta_ms)
-        if any(delta_ms):
-            deltas = self.cubic_final(param, self.eps, grad, delta_ms)
-            torch._foreach_addcmul_(data, deltas, delta_ms)
-            torch._foreach_neg_(delta_ms)
-            torch._foreach_add_(self.mask, delta_ms)
     @torch.no_grad()
     def step(self, **kwargs):
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
         data = [p.data for p in param]
-        grad = [p.grad if p.grad is not None else torch.zeros(p.data.shape).to(self.device) for p in param]
+        grad = [p.grad if p.grad is not None else torch.zeros(p.data.size()).to(self.device) for p in param]
         for iter in range(self.T_out):
             deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
+            torch._foreach_sub_(delta_ms, self.val)
+            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+            delta_ms = torch._foreach_mul(self.mask, delta_ms)
+            if any(delta_ms):
+                deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
+                torch._foreach_addcmul_(data, deltas_f, delta_ms)
+                torch._foreach_mul_(deltas, self.mask)
+                torch._foreach_add_(data, deltas)
+                torch._foreach_neg_(delta_ms)
+                torch._foreach_add_(self.mask, delta_ms)
+            else:
+                torch._foreach_mul_(deltas, self.mask)
+                torch._foreach_add_(data, deltas)
 
-            torch._foreach_mul_(deltas, self.mask)
-
-            torch._foreach_add_(data, deltas)
-            self.check_delta_m(param, delta_ms, grad, data)
             if all(m < 0.5 for m in self.mask):
                 break
 
-    # Algorithm 4 Cubic-Subsolver via Gradient Descent
 
     def cubic_final(self, param, eps, grad, delta_ms):
         # ∆ ← 0, g_m ← g, mu ← 1/(20l)
         delta = [torch.zeros(g.size()).to(self.device) for g in grad]
-        grad_m = torch._foreach_mul(grad, delta_ms)
+        grad_m = [g.detach().clone() for g in grad]
+        delta_ms = [d.detach().clone() for d in delta_ms]
         mu = 1.0 / (20.0 * self.l_)
-        a = torch.max(torch.stack(torch._foreach_norm(grad_m)))
+        a = torch._foreach_norm(grad_m)
+        torch._foreach_mul_(a, delta_ms)
+        a = torch.max(torch.stack(a))
 
-        while a >= eps / 2:
+        while a > eps / 2:
             torch._foreach_mul_(grad_m, -mu)
-            torch._foreach_add_(delta, grad_m)
-            grad_m = hvp(self.f, tuple(param), tuple(delta))[1]
+            torch._foreach_addcmul_(delta, grad_m, delta_ms)
+            grad_m = vhp(self.f, tuple(param), tuple(delta))[1]
 
-            # g_m ← g + B[∆] + ρ/2||∆||
+            # g_m ← g + B[∆] + ρ/2||∆||∆
             torch._foreach_add_(grad_m, grad)
             tmp = torch._foreach_norm(delta)
             torch._foreach_mul_(tmp, self.rho / 2)
             torch._foreach_addcmul_(grad_m, delta, tmp)
-            torch._foreach_add_(grad_m, delta_ms)
             norms = torch._foreach_norm(grad_m)
+
             a = torch._foreach_sub(norms, eps / 2)
             torch._foreach_sign_(a)
 
             a = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in a]
-            torch._foreach_mul_(norms, a)
+            torch._foreach_mul_(delta_ms, a)
+            torch._foreach_mul_(norms, delta_ms)
+            # a = torch.max(torch.stack(norms))
             a = torch.max(torch.stack(norms))
 
         return delta
@@ -311,7 +315,7 @@ class SCRN(COptimizer):
             torch._foreach_add_(a, a_mask)
 
             # B[g]
-            hgp = hvp(self.f, tuple(param), tuple(grad))[1]
+            hgp = vhp(self.f, tuple(param), tuple(grad))[1]
             # (gT B[g]) / (ρ||g||2)
             torch._foreach_mul_(hgp, grad)
             hgp = [t.sum() for t in hgp]
@@ -348,8 +352,9 @@ class SCRN(COptimizer):
             torch._foreach_add_(vec, grad)
             for _ in range(self.T_eps):
                 # B[∆]
-                hdp = hvp(self.f, tuple(param), tuple(delta))[1]
+                hdp = vhp(self.f, tuple(param), tuple(delta))[1]
                 # ∆ ← ∆ − μ(g + B[∆] + ρ/2||∆||∆)
+                torch._foreach_mul_(hdp, mu)
                 torch._foreach_add_(hdp, vec)
                 tmp = torch._foreach_norm(delta)
                 torch._foreach_mul_(tmp, self.rho / 2)
@@ -364,7 +369,7 @@ class SCRN(COptimizer):
             torch._foreach_add_(delta, delta1)
         elif m1:
             delta = delta1
-        hdp = hvp(self.f, tuple(param), tuple(delta))[1]
+        hdp = vhp(self.f, tuple(param), tuple(delta))[1]
         torch._foreach_mul_(hdp, delta)
         delta_m = torch._foreach_mul(delta, grad)
         torch._foreach_add_(delta_m, hdp)
@@ -378,7 +383,7 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=3, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
+    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1e-9):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
@@ -389,11 +394,27 @@ class SCRN_Momentum(SCRN):
         self.mask = [torch.tensor(1.0).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
-        grad = [p.grad if p.grad is not None else torch.zeros(p.data.shape).to(self.device) for p in param]
+        grad = [p.grad if p.grad is not None else torch.zeros(p.data.size()).to(self.device) for p in param]
         data = [p.data for p in param]
         for iter in range(self.T_out):
             deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
             new_old_delta = torch._foreach_mul(self.old_delta, self.mask)
+
+            torch._foreach_sub_(delta_ms, self.val)
+            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+            delta_ms = torch._foreach_mul(self.mask, delta_ms)
+            neg_mask_f = None
+            if any(delta_ms):
+                deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
+
+                new_old_delta = torch._foreach_mul(self.old_delta, delta_ms)
+                torch._foreach_mul_(new_old_delta, self.momentum)
+                neg_mask_f = torch._foreach_neg(delta_ms)
+                torch._foreach_add_(neg_mask_f, 1)
+                torch._foreach_mul_(self.old_delta, neg_mask_f)
+                torch._foreach_add_(self.old_delta, new_old_delta)
+                torch._foreach_addcmul_(self.old_delta, deltas_f, delta_ms)
+                torch._foreach_addcmul_(data, self.old_delta, delta_ms)
             torch._foreach_mul_(new_old_delta, self.momentum)
             neg_mask = torch._foreach_neg(self.mask)
             torch._foreach_add_(neg_mask, 1)
@@ -402,22 +423,8 @@ class SCRN_Momentum(SCRN):
             torch._foreach_addcmul_(self.old_delta, deltas, self.mask)
             torch._foreach_addcmul_(data, self.old_delta, self.mask)
 
-            torch._foreach_sub_(delta_ms, self.val)
-            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
-            delta_ms = torch._foreach_mul(self.mask, delta_ms)
-            if any(delta_ms):
-                deltas = self.cubic_final(param, self.eps, grad, delta_ms)
-
-                new_old_delta = torch._foreach_mul(self.old_delta, delta_ms)
-                torch._foreach_mul_(new_old_delta, self.momentum)
-                neg_mask = torch._foreach_neg(delta_ms)
-                torch._foreach_add_(neg_mask, 1)
-                torch._foreach_mul_(self.old_delta, neg_mask)
-                torch._foreach_add_(self.old_delta, new_old_delta)
-                torch._foreach_addcmul_(self.old_delta, deltas, delta_ms)
-                torch._foreach_addcmul_(data, self.old_delta, delta_ms)
-
-                torch._foreach_add_(self.mask, neg_mask)
+            if neg_mask_f is not None:
+                torch._foreach_add_(self.mask, neg_mask_f)
             if all(m < 0.5 for m in self.mask):
                 break
 

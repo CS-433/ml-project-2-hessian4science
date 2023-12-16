@@ -21,11 +21,11 @@ if __name__ == "__main__":
     parser.add_argument("--hidden", default=128, type=int, help="The number of hidden units in the model.")
     parser.add_argument("--num_layers", default="3", help="The list of numbers of layers in the model.")
     parser.add_argument("--conv_number", default="3", help="The list of numbers of convolutional layers in the model.")
-    parser.add_argument("--batch_size", default=128, type=int, help="The batch size for training.")
+    parser.add_argument("--batch_size", default=100, type=int, help="The batch size for training.")
     parser.add_argument("--epochs", default=20, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
     parser.add_argument("--lr", default="0.001", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="SCRN_Momentum",
+    parser.add_argument("--optimizer", default="SCRN",
                         help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
