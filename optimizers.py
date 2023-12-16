@@ -226,7 +226,7 @@ class HVP_RVR(COptimizer):
 
 class SCRN(COptimizer):
     def __init__(self, params, T_out=1, T_eps=10, lr=0.05,
-                 rho=1, c_=1, eps=1):
+                 rho=1, c_=1, eps=0.1):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
@@ -244,7 +244,7 @@ class SCRN(COptimizer):
         self.log = []
         self.name = 'SCRN'
         self.mask = None
-        self.t = 100
+        self.t = 1000
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
 
         self.val = ((-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))).to(self.device)
@@ -389,7 +389,7 @@ class SCRN(COptimizer):
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=1):
+    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=0.1):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
