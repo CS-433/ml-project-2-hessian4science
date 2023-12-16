@@ -245,11 +245,12 @@ class SCRN(COptimizer):
         self.name = 'SCRN'
         self.mask = None
         self.t = 100
+        self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
+
         self.val = ((-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))).to(self.device)
 
     @torch.no_grad()
     def step(self, **kwargs):
-        self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
         data = [p.data for p in param]
@@ -393,10 +394,11 @@ class SCRN_Momentum(SCRN):
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
         self.momentum = momentum
+        self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
+
 
     @torch.no_grad()
     def step(self, **kwargs):
-        self.mask = [torch.tensor(1.0).to(self.device) for group in self.param_groups for _ in group['params']]
         self.l_ = 1 / (20 * self.lr)
         param = [p for group in self.param_groups for p in group['params']]
         grad = [p.grad if p.grad is not None else torch.zeros(p.data.size()).to(self.device) for p in param]
