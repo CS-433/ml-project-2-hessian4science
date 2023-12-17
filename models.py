@@ -1,7 +1,8 @@
 import numpy as np
 import torch.nn as nn
-
-
+import ast
+import torchsummary 
+import torch
 class NN(nn.Module):
     """
     Simple feedforward neural network.
@@ -60,3 +61,12 @@ class NN(nn.Module):
     def _init_weights(self, module):
         module.weight.data.uniform_(-100, 100)
         module.bias.data.zero_()
+
+
+
+
+device = torch.device('cpu' )
+model = NN(input_shape=[3,32,32], hidden=[128, 128, 128], activation='relu', sigmoid_output=True, conv_number=3).to(device)
+
+
+torchsummary.summary(model, input_size=(3,32,32))
