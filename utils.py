@@ -1,3 +1,4 @@
+import copy
 import gc
 import os
 
@@ -208,11 +209,12 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
                 best_test_acc = 0
                 best_test_loss = 0
 
+                hidden_layers = [args.hidden] * num_layer
+                hidden_layers.append(n_class)
+                base_model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
                 for lr in lrs:
                     print(f"Optimizer: {opt}")
-                    hidden_layers = [args.hidden] * num_layer
-                    hidden_layers.append(n_class)
-                    model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
+                    model = copy.deepcopy(base_model)
                     optimizer = getattr(optimizers, opt)(model.parameters(), lr=lr)
                     (train_acc_history,
                      train_loss_history, val_acc_history,
@@ -334,6 +336,9 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
     lr_dict = {opt: lr for opt, lr in zip(optimizers_, lrs)}
     for num_layer in num_layers:
         for conv_number in conv_numbers:
+            hidden_layers = [args.hidden] * num_layer
+            hidden_layers.append(n_class)
+            base_model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
             print(f"num_layer: {num_layer}, conv_number: {conv_number}")
             train_acc_history_list = []
             train_loss_history_list = []
@@ -343,9 +348,7 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
 
             for opt in optimizers_:
                 print(f"Optimizer: {opt}")
-                hidden_layers = [args.hidden] * num_layer
-                hidden_layers.append(n_class)
-                model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
+                model = copy.deepcopy(base_model)
                 optimizer = getattr(optimizers, opt)(model.parameters(), lr=lr_dict[opt])
                 (train_acc_history,
                  train_loss_history, val_acc_history,
