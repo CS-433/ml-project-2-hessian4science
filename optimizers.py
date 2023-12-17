@@ -226,7 +226,7 @@ class HVP_RVR(COptimizer):
 
 class SCRN(COptimizer):
     def __init__(self, params, T_out=1, T_eps=10, lr=0.05,
-                 rho=1, c_=1, eps=0.1):
+                 rho=1, c_=1, eps=0.05, using_final=False):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         defaults = dict(T_out=T_out, T_eps=T_eps, lr=lr, rho=rho, c_=c_, eps=eps)
         super(SCRN, self).__init__(params, defaults)
@@ -245,6 +245,7 @@ class SCRN(COptimizer):
         self.name = 'SCRN'
         self.mask = None
         self.t = 1000
+        self.using_final = using_final
         self.mask = [torch.tensor(1).to(self.device) for group in self.param_groups for _ in group['params']]
 
         self.val = ((-1 / 100) * torch.sqrt(torch.tensor(self.eps ** 3 / self.rho))).to(self.device)
@@ -257,22 +258,25 @@ class SCRN(COptimizer):
         grad = [p.grad if p.grad is not None else torch.zeros(p.data.size()).to(self.device) for p in param]
         for iter in range(self.T_out):
             deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
-            torch._foreach_sub_(delta_ms, self.val)
-            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
-            delta_ms = torch._foreach_mul(self.mask, delta_ms)
-            if any(delta_ms):
-                deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
-                torch._foreach_addcmul_(data, deltas_f, delta_ms)
-                torch._foreach_mul_(deltas, self.mask)
-                torch._foreach_add_(data, deltas)
-                torch._foreach_neg_(delta_ms)
-                torch._foreach_add_(self.mask, delta_ms)
-            else:
-                torch._foreach_mul_(deltas, self.mask)
-                torch._foreach_add_(data, deltas)
+            if self.using_final:
+                torch._foreach_sub_(delta_ms, self.val)
+                delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+                delta_ms = torch._foreach_mul(self.mask, delta_ms)
+                if any(delta_ms):
+                    deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
+                    torch._foreach_addcmul_(data, deltas_f, delta_ms)
+                    torch._foreach_mul_(deltas, self.mask)
+                    torch._foreach_add_(data, deltas)
+                    torch._foreach_neg_(delta_ms)
+                    torch._foreach_add_(self.mask, delta_ms)
+                else:
+                    torch._foreach_mul_(deltas, self.mask)
+                    torch._foreach_add_(data, deltas)
 
-            if all(m < 0.5 for m in self.mask):
-                break
+                if all(m < 0.5 for m in self.mask):
+                    break
+            else:
+                torch._foreach_add_(data, deltas)
 
     def cubic_final(self, param, eps, grad, delta_ms):
         # ∆ ← 0, g_m ← g, mu ← 1/(20l)
@@ -375,21 +379,23 @@ class SCRN(COptimizer):
             torch._foreach_add_(delta, delta1)
         elif m1:
             delta = delta1
-        hdp = vhp(self.f, tuple(param), tuple(delta))[1]
-        torch._foreach_mul_(hdp, delta)
-        delta_m = torch._foreach_mul(delta, grad)
-        torch._foreach_add_(delta_m, hdp)
-        delta_m = [t.sum() for t in delta_m]
-        tmp = torch._foreach_norm(delta)
-        torch._foreach_pow_(tmp, 3)
-        torch._foreach_mul_(tmp, self.rho / 6)
-        torch._foreach_add_(delta_m, tmp)
-
+        if self.using_final:
+            hdp = vhp(self.f, tuple(param), tuple(delta))[1]
+            torch._foreach_mul_(hdp, delta)
+            delta_m = torch._foreach_mul(delta, grad)
+            torch._foreach_add_(delta_m, hdp)
+            delta_m = [t.sum() for t in delta_m]
+            tmp = torch._foreach_norm(delta)
+            torch._foreach_pow_(tmp, 3)
+            torch._foreach_mul_(tmp, self.rho / 6)
+            torch._foreach_add_(delta_m, tmp)
+        else:
+            delta_m = None
         return delta, delta_m
 
 
 class SCRN_Momentum(SCRN):
-    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=0.1):
+    def __init__(self, params, T_out=1, momentum=0.9, T_eps=10, lr=0.05, rho=1, c_=1, eps=0.05):
         super(SCRN_Momentum, self).__init__(params, T_out, T_eps, lr, rho, c_, eps)
         self.old_delta = [torch.zeros(p.size()).to(self.device) for group in self.param_groups for p in group['params']]
         self.name = 'SCRN_Momentum'
@@ -405,35 +411,40 @@ class SCRN_Momentum(SCRN):
         data = [p.data for p in param]
         for iter in range(self.T_out):
             deltas, delta_ms = self.cubic_regularization(param, self.eps, grad)
-            new_old_delta = torch._foreach_mul(self.old_delta, self.mask)
+            if self.using_final:
+                new_old_delta = torch._foreach_mul(self.old_delta, self.mask)
 
-            torch._foreach_sub_(delta_ms, self.val)
-            delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
-            delta_ms = torch._foreach_mul(self.mask, delta_ms)
-            neg_mask_f = None
-            if any(delta_ms):
-                deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
+                torch._foreach_sub_(delta_ms, self.val)
+                delta_ms = [torch.tensor(1 if t > 0.5 else 0, dtype=torch.int8).to(self.device) for t in delta_ms]
+                delta_ms = torch._foreach_mul(self.mask, delta_ms)
+                neg_mask_f = None
+                if any(delta_ms):
+                    deltas_f = self.cubic_final(param, self.eps, grad, delta_ms)
 
-                new_old_delta = torch._foreach_mul(self.old_delta, delta_ms)
+                    new_old_delta = torch._foreach_mul(self.old_delta, delta_ms)
+                    torch._foreach_mul_(new_old_delta, self.momentum)
+                    neg_mask_f = torch._foreach_neg(delta_ms)
+                    torch._foreach_add_(neg_mask_f, 1)
+                    torch._foreach_mul_(self.old_delta, neg_mask_f)
+                    torch._foreach_add_(self.old_delta, new_old_delta)
+                    torch._foreach_addcmul_(self.old_delta, deltas_f, delta_ms)
+                    torch._foreach_addcmul_(data, self.old_delta, delta_ms)
                 torch._foreach_mul_(new_old_delta, self.momentum)
-                neg_mask_f = torch._foreach_neg(delta_ms)
-                torch._foreach_add_(neg_mask_f, 1)
-                torch._foreach_mul_(self.old_delta, neg_mask_f)
+                neg_mask = torch._foreach_neg(self.mask)
+                torch._foreach_add_(neg_mask, 1)
+                torch._foreach_mul_(self.old_delta, neg_mask)
                 torch._foreach_add_(self.old_delta, new_old_delta)
-                torch._foreach_addcmul_(self.old_delta, deltas_f, delta_ms)
-                torch._foreach_addcmul_(data, self.old_delta, delta_ms)
-            torch._foreach_mul_(new_old_delta, self.momentum)
-            neg_mask = torch._foreach_neg(self.mask)
-            torch._foreach_add_(neg_mask, 1)
-            torch._foreach_mul_(self.old_delta, neg_mask)
-            torch._foreach_add_(self.old_delta, new_old_delta)
-            torch._foreach_addcmul_(self.old_delta, deltas, self.mask)
-            torch._foreach_addcmul_(data, self.old_delta, self.mask)
+                torch._foreach_addcmul_(self.old_delta, deltas, self.mask)
+                torch._foreach_addcmul_(data, self.old_delta, self.mask)
 
-            if neg_mask_f is not None:
-                torch._foreach_add_(self.mask, neg_mask_f)
-            if all(m < 0.5 for m in self.mask):
-                break
+                if neg_mask_f is not None:
+                    torch._foreach_add_(self.mask, neg_mask_f)
+                if all(m < 0.5 for m in self.mask):
+                    break
+            else:
+                torch._foreach_mul_(self.old_delta, self.momentum)
+                torch._foreach_add_(self.old_delta, deltas)
+                torch._foreach_add_(data, self.old_delta)
 
 
 class LBFGS(torch.optim.LBFGS):
