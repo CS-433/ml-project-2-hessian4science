@@ -149,9 +149,12 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
             model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
         )
 
-        train_loss_history.extend(train_loss)
-        train_acc_history.extend(train_acc)
-        lr_history.extend(lr)
+        # train_loss_history.extend(train_loss)
+        train_loss_history.append(train_loss)
+        # train_acc_history.extend(train_acc)
+        train_acc_history.append(train_acc)
+        # lr_history.extend(lr)
+        lr_history.append(lr)
         train_loss_avg = np.mean(train_loss)
         train_acc_avg = np.mean(train_acc) * 100
 
