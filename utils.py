@@ -52,12 +52,12 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
     :return: train loss history, train accuracy history, learning rate history
     """
     model.train()
-    loss_history = []
-    accuracy_history = []
-    lr_history = []
-    # total_loss = 0.0
-    # total_accuracy = 0.0
-    # total = 0
+    # loss_history = []
+    # accuracy_history = []
+    # lr_history = []
+    total_loss = 0.0
+    total_accuracy = 0.0
+    total = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         if optimizer.name == "LBFGS":
@@ -84,16 +84,16 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
         accuracy_float = (output.argmax(dim=1) == target).float().mean().item()
 
         loss_float = loss.item()
-        # total_loss += loss_float * len(data)
-        # total_accuracy += accuracy_float * len(data)
-        # total += len(data)
-        loss_history.append(loss_float)
-
-        accuracy_history.append(accuracy_float)
-        if scheduler is not None:
-            lr_history.append(scheduler.get_last_lr()[0])
-        else:
-            lr_history.append(optimizer.param_groups[0]['lr'])
+        total_loss += loss_float * len(data)
+        total_accuracy += accuracy_float * len(data)
+        total += len(data)
+        # loss_history.append(loss_float)
+        #
+        # accuracy_history.append(accuracy_float)
+        # if scheduler is not None:
+        #     lr_history.append(scheduler.get_last_lr()[0])
+        # else:
+        #     lr_history.append(optimizer.param_groups[0]['lr'])
         if verbose and batch_idx % (len(train_loader.dataset) // len(data) // 10) == 0:
             if scheduler is None:
                 lr = optimizer.param_groups[0]['lr']
@@ -105,12 +105,12 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
                 f"batch_acc={accuracy_float:0.3f} "
                 f"lr={lr:0.3e} "
             )
-    # if scheduler is None:
-    #     lr = optimizer.param_groups[0]['lr']
-    # else:
-    #     lr = scheduler.get_last_lr()[0]
-    # return total_loss / total, total_accuracy / total, lr
-    return loss_history, accuracy_history, lr_history
+    if scheduler is None:
+        lr = optimizer.param_groups[0]['lr']
+    else:
+        lr = scheduler.get_last_lr()[0]
+    return total_loss / total, total_accuracy / total, lr
+    # return loss_history, accuracy_history, lr_history
 
 
 def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, device="cpu", verbose=True,
