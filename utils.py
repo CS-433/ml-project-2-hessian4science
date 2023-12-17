@@ -60,33 +60,38 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
     total = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
-        if optimizer.name == "LBFGS":
-            def closure():
-                optimizer.zero_grad()
-                output = model(data)
-                loss = criterion(output, target)
-                loss.backward()
-                return loss
+        if optimizer.name == 'SCRN' or optimizer.name == 'SCRN_Momentum':
+            ind = len(data) // 2
+            data_for_grad = data[:ind]
+            target_for_grad = target[:ind]
+            data_for_hessian = data[ind:]
+            target_for_hessian = target[ind:]
 
-            optimizer.step(closure)
-            with torch.no_grad():
-                output = model(data)
-                loss = criterion(output, target)
+            optimizer.zero_grad()
+            optimizer.set_f(model, data_for_hessian, target_for_hessian, criterion)
+            output = model(data_for_grad)
+            loss = criterion(output, target_for_grad)
+            loss.backward()
+            optimizer.step()
+            accuracy_float = (output.argmax(dim=1) == target_for_grad).float().mean().item()
+
+            loss_float = loss.item()
+            total_loss += loss_float * len(data_for_grad)
+            total_accuracy += accuracy_float * len(data_for_grad)
+            total += len(data_for_grad)
         else:
             optimizer.zero_grad()
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
-            optimizer.set_f(model, data, target, criterion)
             optimizer.step()
-        if scheduler is not None:
-            scheduler.step()
-        accuracy_float = (output.argmax(dim=1) == target).float().mean().item()
 
-        loss_float = loss.item()
-        total_loss += loss_float * len(data)
-        total_accuracy += accuracy_float * len(data)
-        total += len(data)
+            accuracy_float = (output.argmax(dim=1) == target).float().mean().item()
+
+            loss_float = loss.item()
+            total_loss += loss_float * len(data)
+            total_accuracy += accuracy_float * len(data)
+            total += len(data)
         # loss_history.append(loss_float)
         #
         # accuracy_history.append(accuracy_float)
@@ -105,6 +110,8 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
                 f"batch_acc={accuracy_float:0.3f} "
                 f"lr={lr:0.3e} "
             )
+        if scheduler is not None:
+            scheduler.step()
     if scheduler is None:
         lr = optimizer.param_groups[0]['lr']
     else:

@@ -24,8 +24,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", default=100, type=int, help="The batch size for training.")
     parser.add_argument("--epochs", default=2, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
-    parser.add_argument("--lr", default="0.001", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="SGD,Adam",
+    parser.add_argument("--lr", default="0.001,0.001", help="The list of learning rates for the optimizers.")
+    parser.add_argument("--optimizer", default="SCRN,SCRN_Momentum",
                         help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
