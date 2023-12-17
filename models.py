@@ -56,3 +56,7 @@ class NN(nn.Module):
         :return: The output.
         """
         return self.seq(x)
+
+    def _init_weights(self, module):
+        module.weight.data.uniform_(-100, 100)
+        module.bias.data.zero_()
