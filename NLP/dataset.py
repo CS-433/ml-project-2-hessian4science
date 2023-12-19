@@ -238,8 +238,6 @@ def preprocess(datas):
 
 def apply_augmentation(dataframe):
 
-
-
     train_tweets = list(dataframe['tweet'])
     train_labels = list(dataframe['class'])
 
@@ -263,7 +261,7 @@ def apply_augmentation(dataframe):
     train_tweets.extend(new_tweets)
     train_labels.extend(new_labels)
 
-    return 
+    return train_tweets, train_labels
 
 
 
@@ -287,17 +285,15 @@ def process_dataset(path, seed):
     #Data cleaning
     print("Cleaning dataset...")
     clean_tweets = preprocess(tweets)
-
-
-    data       = pd.DataFrame(list(zip(labels,clean_tweets)), columns = ['class', 'tweet']).sample(frac=1, random_state=seed)
+    data['tweet'] = clean_tweets
 
     #Split data
     train_data = data[:int(len(data)*0.8)]
     val_data   = data [int(len(data)*0.8):int(len(data)*0.9)]
     test_data  = data[int(len(data)*0.9):]
 
-
-
+    
+    #Augmentation of training data
     train_tweets = list(train_data['tweet'])
     train_labels = list(train_data['class'])
 
@@ -305,18 +301,14 @@ def process_dataset(path, seed):
     print("Applying augmentation...")
     zero_pairs = [clean_tweet for label, clean_tweet in zip(train_labels, train_tweets) if label == 0]
     new_tweets = []
+
     for tweet in zero_pairs:
-        largo = len(tweet.split(" ")) // 3
-        if largo < 2:
-            largo = random.randint(2, 3)
+        word_count = max(len(tweet.split(" ")) // 3, 2)
 
-        # First round of augmentation
-        augmented_tweet = random_augmentation(tweet, largo)
-        new_tweets.append(augmented_tweet)
+        for _ in range(2):
+            augmented_tweet = random_augmentation(tweet, word_count)
+            new_tweets.append(augmented_tweet)
 
-        # Second round of augmentation
-        augmented_tweet = random_augmentation(tweet, largo)
-        new_tweets.append(augmented_tweet)
 
     # Update labels and extend the original dataset
     new_labels = [0] * len(new_tweets)

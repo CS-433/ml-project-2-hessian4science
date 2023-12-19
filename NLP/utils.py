@@ -26,9 +26,6 @@ stop_words.add("rt")  # add 'rt' to remove retweet in dataset (noise)
 
 
 
-
-
-
 # ========================== Tweet Dataset  ========================== #
 class HATEDataset(Dataset):
     """
@@ -108,100 +105,6 @@ class HATEDataset(Dataset):
     
 
 
-
-class HATEDataset(Dataset):
-    """
-    Implement HATEDataset in Pytorch
-    """
-    def __init__(self, data_repo, tokenizer, sent_max_length=512):
-      
-        self.tokenizer = tokenizer
-        self.max_length = sent_max_length
-
-        self.pad_token = self.tokenizer.pad_token
-        self.pad_id = self.tokenizer.pad_token_id
-
-        self.text_samples = []
-        self.samples = []
-        
-        print("Building Hate Dataset...")
-        
-        with open(data_repo, newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)  # or csv.reader(csvfile) if your CSV doesn't have headers
-            
-            for sample in tqdm(reader):
-                self.text_samples.append(sample)
-
-                input_ids = self.tokenizer.encode(sample["tweet"], max_length=sent_max_length, truncation=True, add_special_tokens=False)
-                
-                label = int(sample["class"])
-                self.samples.append({"ids": input_ids, "label": label})
-
-    def __len__(self):
-        return len(self.samples)
-    
-    def __getitem__(self, index):
-        return deepcopy(self.samples[index])
-
-    def padding(self, inputs, max_length=-1):
-        """
-        Pad inputs to the max_length.
-        
-        INPUT: 
-          - inputs: input token ids
-          - max_length: the maximum length you should add padding to.
-          
-        OUTPUT: 
-          - pad_inputs: token ids padded to `max_length` """
-
-        if max_length < 0:
-            max_length = max(list(map(len, inputs)))
-
-        pad_inputs = [ each + [self.pad_id] * (max_length - len(each)) for each in inputs]
-        
-
-        return pad_inputs
-        
-    def collate_fn(self, batch):
-        """
-        Convert batch inputs to tensor of batch_ids and labels.
-        
-        INPUT: 
-          - batch: batch input, with format List[Dict1{"ids":..., "label":...}, Dict2{...}, ..., DictN{...}]
-          
-        OUTPUT: 
-          - tensor_batch_ids: torch tensor of token ids of a batch, with format Tensor(List[ids1, ids2, ..., idsN])
-          - tensor_labels: torch tensor for corresponding labels, with format Tensor(List[label1, label2, ..., labelN])
-        """
-
-        batch_ids =  [each["ids"] for each in batch]
-        tensor_batch_ids = torch.tensor(self.padding(batch_ids, self.max_length))
-        
-        batch_labels = [each["label"] for each in batch]
-        tensor_labels = torch.tensor(batch_labels).long()
-        
-        return tensor_batch_ids, tensor_labels
-    
-    def get_text_sample(self, index):
-        return deepcopy(self.text_samples[index])
-    
-    def decode_class(self, class_ids):
-        """
-        Decode to output the predicted class name.
-        
-        INPUT: 
-          - class_ids: index of each class.
-          
-        OUTPUT: 
-          - labels_from_ids: a list of label names. """
-
-        print(class_ids)
-        label_name_list = [self.id_to_label[each] for each in class_ids]
-
-        
-        return label_name_list
-
-
 def compute_metrics(predictions, gold_labels):
     """
     Compute evaluation metrics (accuracy and F1 score) for NLI task.
@@ -264,7 +167,6 @@ def train(train_dataset:HATEDataset, dev_dataset, model, device, batch_size, epo
 
     # Initial optimizer
     train_loss, train_acc, train_f1_ent, train_f1_neu, train_f1_con, train_macro_f1 = evaluate(train_dataset, model, device, batch_size)
-
     dev_loss, acc, f1_ent, f1_neu, f1_con, macro_f1 = evaluate(dev_dataset, model, device, batch_size)
     
     print(f'\nEpoch: {0} | Training Loss: {train_loss:.3f} | Validation Loss: {dev_loss:.3f}')
@@ -322,10 +224,6 @@ def train(train_dataset:HATEDataset, dev_dataset, model, device, batch_size, epo
 
             # conduct back-proporgation
             loss.backward()
-        
-        
-
-
 
             # trancate gradient to max_grad_norm
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
@@ -353,8 +251,6 @@ def train(train_dataset:HATEDataset, dev_dataset, model, device, batch_size, epo
                 # epoch evaluation
                 dev_loss, acc, f1_ent, f1_neu, f1_con, macro_f1 = evaluate(dev_dataset, model, device, batch_size)
                 
-
-
 
                 train_values[0].append(train_loss_accum)
                 train_values[1].append(train_acc)

@@ -92,7 +92,7 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
             total_loss += loss_float * len(data)
             total_accuracy += accuracy_float * len(data)
             total += len(data)
-            
+
         if verbose and batch_idx % (len(train_loader.dataset) // len(data) // 10) == 0:
             if scheduler is None:
                 lr = optimizer.param_groups[0]['lr']
@@ -324,7 +324,7 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
 
 def learn_models(lrs, optimizers_, num_layers, conv_numbers,
                  dataloader, val_dataloader, test_dataloader, input_shape, n_class, device='cpu', args=None,
-                 verbose=True):
+                 verbose=True, num_iter=5):
     """
     Learn models
         :param lrs: list of learning rates
