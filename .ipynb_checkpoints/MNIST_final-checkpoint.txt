@@ -1,32 +1,0 @@
-Learning rates: [0.001, 0.1, 0.001, 0.001]
-Optimizers: ['Adam', 'SGD', 'SCRN', 'SCRN_Momentum']
-Number of layers: [3]
-Number of convolutional layers: [3]
-Using cuda
-Scheduler: False
-num_layer: 3, conv_number: 3
-num_iter: 0
-Optimizer: Adam
-Initial validation
-Initial train loss: 2.3028, Initial train acc: 9.89%
-Initial valid loss: 2.3027, Initial valid acc: 10.28%
-  0%|          | 0/2 [00:00<?, ?epochs/s]Train Epoch: 1-000 batch_loss=2.30e+00 batch_acc=0.130 lr=1.000e-03 
-Train Epoch: 1-054 batch_loss=1.85e+00 batch_acc=0.940 lr=1.000e-03 
-Train Epoch: 1-108 batch_loss=1.83e+00 batch_acc=0.950 lr=1.000e-03 
-Train Epoch: 1-162 batch_loss=1.80e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 1-216 batch_loss=1.80e+00 batch_acc=0.960 lr=1.000e-03 
-Train Epoch: 1-270 batch_loss=1.77e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 1-324 batch_loss=1.76e+00 batch_acc=0.980 lr=1.000e-03 
-Train Epoch: 1-378 batch_loss=1.75e+00 batch_acc=0.980 lr=1.000e-03 
-Train Epoch: 1-432 batch_loss=1.73e+00 batch_acc=0.980 lr=1.000e-03 
-Train Epoch: 1-486 batch_loss=1.72e+00 batch_acc=0.990 lr=1.000e-03 
- 50%|█████     | 1/2 [00:07<00:07,  7.85s/epochs]Epoch 1/2, Train Loss: 1.7822, Train Acc: 97.08%, Val Loss: 1.6985, Val Acc: 98.97%:  50%|█████     | 1/2 [00:07<00:07,  7.85s/epochs]Train Epoch: 2-000 batch_loss=1.70e+00 batch_acc=1.000 lr=1.000e-03 
-Train Epoch: 2-054 batch_loss=1.69e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 2-108 batch_loss=1.68e+00 batch_acc=1.000 lr=1.000e-03 
-Train Epoch: 2-162 batch_loss=1.67e+00 batch_acc=1.000 lr=1.000e-03 
-Train Epoch: 2-216 batch_loss=1.67e+00 batch_acc=0.980 lr=1.000e-03 
-Train Epoch: 2-270 batch_loss=1.65e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 2-324 batch_loss=1.65e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 2-378 batch_loss=1.64e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 2-432 batch_loss=1.63e+00 batch_acc=0.990 lr=1.000e-03 
-Train Epoch: 2-486 batch_loss=1.63e+00 batch_acc=0.990 lr=1.000e-03 
