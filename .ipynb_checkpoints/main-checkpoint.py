@@ -4,10 +4,9 @@ from torchvision.transforms import v2
 from torch.utils.data import DataLoader
 import torch
 import argparse
-import os 
 
 # Import custom modules
-from utils import model_selection, learn_models
+from utils import cross_validation, learn_models
 
 # Main function
 if __name__ == "__main__":
@@ -20,13 +19,13 @@ if __name__ == "__main__":
     # Add arguments to the parser
     parser.add_argument("--dataset", default="MNIST", help="The dataset to use for training and testing.")
     parser.add_argument("--hidden", default=128, type=int, help="The number of hidden units in the model.")
-    parser.add_argument("--num_layers", default="3", help="The list of numbers of layers in the model.")
-    parser.add_argument("--conv_number", default="3", help="The list of numbers of convolutional layers in the model.")
-    parser.add_argument("--batch_size", default=100, type=int, help="The batch size for training.")
+    parser.add_argument("--num_layers", default="2", help="The list of numbers of layers in the model.")
+    parser.add_argument("--conv_number", default="1", help="The list of numbers of convolutional layers in the model.")
+    parser.add_argument("--batch_size", default=256, type=int, help="The batch size for training.")
     parser.add_argument("--epochs", default=2, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
-    parser.add_argument("--lr", default="0.001,0.001", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="SGD,Adam",
+    parser.add_argument("--lr", default="0.001", help="The list of learning rates for the optimizers.")
+    parser.add_argument("--optimizer", default="LBFGS",
                         help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
@@ -35,8 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--criterion", default="cross_entropy", help="The loss function to use for training.")
     parser.add_argument("--verbose", action="store_true", help="Whether to print detailed training progress.")
     parser.add_argument("--scheduler", action="store_true", help="Whether to use a learning rate scheduler.")
-    parser.add_argument("--model_selection", action="store_true", help="Whether to perform model_selection.")
-    parser.add_argument("--num_iter", default=5, type=int, help="The number of different models to train.")
+    parser.add_argument("--cross_val", action="store_true", help="Whether to perform cross-validation.")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -94,21 +92,19 @@ if __name__ == "__main__":
     train_size = len(dataset) - val_size
     dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-    os.makedirs(args.dataset, exist_ok=True)
-    
     # Create data loaders for the training, validation, and test sets
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
-    if args.model_selection:
-        # Perform model selection to find the best hyperparameters
-        model_selection(lrs, optimizers_, num_layers,
-                        conv_numbers,
-                        dataloader, val_dataloader,
-                        test_dataloader, input_shape,
-                        n_class, device=device,
-                        args=args, verbose=args.verbose)
+    if args.cross_val:
+        # Perform cross-validation to find the best hyperparameters
+        cross_validation(lrs, optimizers_, num_layers,
+                         conv_numbers,
+                         dataloader, val_dataloader,
+                         test_dataloader, input_shape,
+                         n_class, device=device,
+                         args=args, verbose=args.verbose)
 
     else:
         # Train the models
@@ -117,5 +113,5 @@ if __name__ == "__main__":
                      dataloader, val_dataloader,
                      test_dataloader, input_shape,
                      n_class, device=device,
-                     args=args, verbose=args.verbose,
-                     num_iter=args.num_iter)
+                     args=args, verbose=args.verbose)
+
