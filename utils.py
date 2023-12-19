@@ -1,6 +1,7 @@
 import copy
 import gc
 import os
+import csv
 
 import numpy as np
 import torch
@@ -386,16 +387,15 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
                     val_loss_history_list.append(val_loss_history)
                     lr_history_list.append(lr_history)
                     if args.save:
-                        torch.save(train_acc_history_list, os.path.join(save_path,
-                                                                        f"train_acc_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
-                        torch.save(train_loss_history_list, os.path.join(save_path,
-                                                                         f"train_loss_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
-                        torch.save(val_acc_history_list, os.path.join(save_path,
-                                                                        f"val_acc_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
-                        torch.save(val_loss_history_list, os.path.join(save_path,
-                                                                            f"val_loss_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
-                        torch.save(lr_history_list, os.path.join(save_path,
-                                                                    f"lr_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        file_name = f"train_acc_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}"
+
+                        with open(file_name, mode='w', newline='') as file:
+                            writer = csv.writer(file)
+
+                            writer.writerow(["train_acc"," train_loss", "val_acc", "val_loss"])
+                            for row in zip(train_acc_history, train_loss_history, val_acc_history, val_loss_history):
+                                writer.writerow(row)
+    
                         torch.save(model.state_dict(),
                                    os.path.join(save_path, f"lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
 
