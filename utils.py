@@ -413,7 +413,7 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
                         n_train = len(train_acc_history_list[0])
                         t_train = args.epochs * np.arange(n_train) / n_train
                         t_val = np.arange(0, args.epochs + 1)
-
+                        print(train_acc_history_list)
                         for i, opt in enumerate(optimizers_):
                             plt.plot(t_train, train_acc_history_list[i], label=opt)
                         plt.legend()
