@@ -387,7 +387,7 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
                     val_loss_history_list.append(val_loss_history)
                     lr_history_list.append(lr_history)
                     if args.save:
-                        file_name = f"{args.dataset}_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.csv"
+                        file_name = f"{args.dataset}/history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.csv"
 
                         with open(file_name, mode='w', newline='') as file:
                             writer = csv.writer(file)

@@ -93,6 +93,8 @@ if __name__ == "__main__":
     val_size = int(0.1 * len(dataset))
     train_size = len(dataset) - val_size
     dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    os.makedirs(args.dataset, exist_ok=True)
     
     # Create data loaders for the training, validation, and test sets
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
