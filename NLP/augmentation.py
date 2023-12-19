@@ -1,7 +1,7 @@
 import random
 import nltk
-# nltk.download('wordnet')
-# nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('stopwords')
   
 from nltk.corpus import wordnet, stopwords
 
@@ -22,16 +22,6 @@ def synonym_replacement(sentence, n):
     
     words = sentence.split()
     
-    ############################################################################
-    # TODO: Replace up to n random words in the sentence with their synonyms.  #
-    #   You should                                                             #
-    #   - (i)   replace random words with one of its synonyms, until           #
-    #           the number of replacement gets to n or all the words           #
-    #           have been replaced;                                            #
-    #   - (ii)  NO stopwords should be replaced!                               #
-    #   - (iii) return a new sentence after all the replacement.               #
-    ############################################################################
-    # Replace "..." with your code
     random_word_list  = [word for word in words if word not in stopwords.words('english')]
     random_replaces = min(len(words), min(len(random_word_list), n))
     random_word_list = [ [word,get_synonyms(word)] for word in random_word_list][:random_replaces]
@@ -47,11 +37,6 @@ def synonym_replacement(sentence, n):
         new_sentence[position] = synonum[0]
     new_sentence = ' '.join(new_sentence)
             
-        
-    ############################################################################
-    #                               END OF YOUR CODE                           #
-    ############################################################################
-
     return new_sentence
 
 
@@ -65,14 +50,6 @@ def random_deletion(sentence, p, max_deletion_n):
     if len(words) == 1:
         return " ".join(words)
 
-    ############################################################################
-    # TODO: Randomly delete words with probability p. You should               #
-    # - (i)   iterate through all the words and determine whether each of them #
-    #         should be deleted;                                               #
-    # - (ii)  you can delete at most `max_deletion_n` words;                   #
-    # - (iii) return the new sentence after deletion.                          #
-    ############################################################################
-    # Replace "..." with your code
 
     new_sentence = []
     deletions = 0
@@ -83,9 +60,6 @@ def random_deletion(sentence, p, max_deletion_n):
       
       new_sentence.append(word)    
     new_sentence = " ".join(new_sentence)
-    ############################################################################
-    #                               END OF YOUR CODE                           #
-    ############################################################################
     
     return new_sentence
 
@@ -96,20 +70,11 @@ def swap_word(sentence):
     words = sentence.split()
     if len(words) <= 1:
       return sentence
-    ############################################################################
-    # TODO: Randomly swap two words in the sentence. You should                #
-    # - (i)   randomly get two indices;                                        #
-    # - (ii)  swap two tokens in these positions.                              #
-    ############################################################################
-    # Replace "..." with your code
     random_idx_1, random_idx_2 = random.sample(range(len(words)), 2)
     words[random_idx_1], words[random_idx_2] = words[random_idx_2], words[random_idx_1]
     new_sentence = words
     new_sentence = " ".join(new_sentence)
     
-    ############################################################################
-    #                               END OF YOUR CODE                           #
-    ############################################################################
 
     return new_sentence
 
@@ -128,17 +93,55 @@ def random_insertion(sentence, n):
 def add_word(new_words):
     
     synonyms = []
-    ############################################################################
-    # TODO: Randomly choose one synonym and insert it into the word list.      #
-    # - (i)  Get a synonym word of one random word from the word list;         #
-    # - (ii) Insert the selected synonym into a random place in the word list. #
-    ############################################################################
-    # Replace "..." with your code
     try:
       random_synonym = random.choice(get_synonyms(random.choice(new_words)))
       new_words.insert(random.randint(0, len(new_words)), random_synonym)
     except:
       pass
-    ############################################################################
-    #                               END OF YOUR CODE                           #
-    ############################################################################
+
+# ========================== Choose and apply random augmentations ========================== #
+def random_augmentation(tweet, largo, number_augmenteations=3):
+  # List of augmentation functions
+  augmentation_functions = [synonym_replacement, random_deletion, random_insertion, swap_word]
+
+  # Select three unique augmentation functions randomly
+  selected_functions = random.sample(augmentation_functions, number_augmenteations)
+
+  # Apply the selected augmentation functions
+  for func in selected_functions:
+    
+      if func in [synonym_replacement, random_insertion]:
+          tweet = func(tweet, n=largo)
+      elif func == random_deletion:
+          tweet = func(tweet, p=0.35, max_deletion_n=largo)
+      elif func == swap_word:
+          for _ in range(largo):
+              tweet = func(tweet)
+
+  return tweet
+
+
+def apply_augmentation(clean_tweets, labels):
+    
+  # Get the tweets with label 0
+  tweets_with_label_zero = [clean_tweet for label, clean_tweet in zip(labels, clean_tweets) if label == 0]
+
+  new_tweets = []
+  for tweet in tweets_with_label_zero:
+      intensity = len(tweet.split(" ")) // 3
+
+      if intensity < 2:
+          intensity = random.randint(2, 3)
+
+      # RoundS of augmentation
+      for _ in range(2):
+          augmented_tweet = random_augmentation(tweet, intensity)
+          new_tweets.append(augmented_tweet)
+
+
+  # Update labels and extend the original dataset
+  new_labels = [0] * len(new_tweets)
+  clean_tweets.extend(new_tweets)
+  labels.extend(new_labels)
+
+  return clean_tweets, labels

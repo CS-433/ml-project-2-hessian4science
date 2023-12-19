@@ -92,7 +92,13 @@ def train_epoch(model, optimizer, criterion, train_loader, epoch, device, verbos
             total_loss += loss_float * len(data)
             total_accuracy += accuracy_float * len(data)
             total += len(data)
-            
+        # loss_history.append(loss_float)
+        #
+        # accuracy_history.append(accuracy_float)
+        # if scheduler is not None:
+        #     lr_history.append(scheduler.get_last_lr()[0])
+        # else:
+        #     lr_history.append(optimizer.param_groups[0]['lr'])
         if verbose and batch_idx % (len(train_loader.dataset) // len(data) // 10) == 0:
             if scheduler is None:
                 lr = optimizer.param_groups[0]['lr']
@@ -139,15 +145,10 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
 
     # ===== Train Model =====
     lr_history = []
-
-
-    initial_train_loss, initial_train_acc = validate(model, device, train_loader, criterion)
-    initial_valid_loss, initial_valid_acc = validate(model, device, train_loader, criterion)
-
-    train_loss_history = [initial_train_loss]
-    train_acc_history = [initial_train_acc]
-    val_loss_history = [initial_valid_loss]
-    val_acc_history = [initial_valid_acc]
+    train_loss_history = []
+    train_acc_history = []
+    val_loss_history = []
+    val_acc_history = []
     # scaler = GradScaler()
     pbar = tqdm(total=epochs, unit="epochs")
     for epoch in range(1, epochs + 1):
@@ -155,10 +156,12 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
             model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
         )
 
+        # train_loss_history.extend(train_loss)
         train_loss_history.append(train_loss)
+        # train_acc_history.extend(train_acc)
         train_acc_history.append(train_acc)
+        # lr_history.extend(lr)
         lr_history.append(lr)
-
         train_loss_avg = np.mean(train_loss)
         train_acc_avg = np.mean(train_acc) * 100
 
@@ -271,8 +274,6 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
                 n_train = len(train_acc_history_list[0])
                 t_train = args.epochs * np.arange(n_train) / n_train
                 t_val = np.arange(1, args.epochs + 1)
-                min_loss = min([min(loss) for loss in val_loss_history_list]+[min(loss) for loss in train_loss_history_list])
-                max_loss = max([max(loss) for loss in val_loss_history_list]+[max(loss) for loss in train_loss_history_list])
 
                 for i, opt in enumerate(optimizers_):
                     plt.plot(t_train, train_acc_history_list[i], label=opt)
@@ -286,7 +287,6 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
                 for i, opt in enumerate(optimizers_):
                     plt.plot(t_train, train_loss_history_list[i], label=opt)
                 plt.legend()
-                plt.ylim(min_loss, max_loss)
                 plt.xlabel("Epoch")
                 plt.ylabel("Loss")
                 plt.savefig(
@@ -314,7 +314,6 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
                 for i, opt in enumerate(optimizers_):
                     plt.plot(t_val, val_loss_history_list[i], label=opt)
                 plt.legend()
-                plt.ylim(min_loss, max_loss)
                 plt.xlabel("Epoch")
                 plt.ylabel("Loss")
                 plt.savefig(

@@ -2,7 +2,7 @@ import torch.nn as nn
 class SentimentBaselineModel(nn.Module):
 
     def __init__(self, features):
-        super(SentimentAnalysisModel, self).__init__()
+        super( ).__init__()
         self.layers = []
         size= features
         self.layers.append(nn.Linear(size, size//2))
