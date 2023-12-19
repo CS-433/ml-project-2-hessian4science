@@ -171,7 +171,7 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
         val_acc_history.append(val_acc)
         pbar.update(1)
         pbar.set_description_str(
-            f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss_avg:.4f}, Train Acc: {train_acc_avg:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc * 100:.2f}%")
+            f"Epoch {epoch}/{epochs}, Train Loss: {train_loss_avg:.4f}, Train Acc: {train_acc_avg:.2f}%, Val Loss: {val_loss:.4f}, Val Acc: {val_acc * 100:.2f}%")
 
     pbar.close()
 
@@ -387,7 +387,7 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
                     val_loss_history_list.append(val_loss_history)
                     lr_history_list.append(lr_history)
                     if args.save:
-                        file_name = f"history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}"
+                        file_name = f"history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.csv"
 
                         with open(file_name, mode='w', newline='') as file:
                             writer = csv.writer(file)
