@@ -140,10 +140,11 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
     # ===== Train Model =====
     lr_history = []
 
-
+    print("Initial validation")
     initial_train_loss, initial_train_acc = validate(model, device, train_loader, criterion)
-    initial_valid_loss, initial_valid_acc = validate(model, device, train_loader, criterion)
-
+    print(f"Initial train loss: {initial_train_loss:.4f}, Initial train acc: {initial_train_acc * 100:.2f}%")
+    initial_valid_loss, initial_valid_acc = validate(model, device, val_loader, criterion)
+    print(f"Initial valid loss: {initial_valid_loss:.4f}, Initial valid acc: {initial_valid_acc * 100:.2f}%")
     train_loss_history = [initial_train_loss]
     train_acc_history = [initial_train_acc]
     val_loss_history = [initial_valid_loss]
@@ -155,10 +156,12 @@ def learn(model, train_loader, val_loader, optimizer, criterion, epochs=10, devi
             model, optimizer, criterion, train_loader, epoch, device, verbose=verbose, scheduler=scheduler
         )
 
+        # train_loss_history.extend(train_loss)
         train_loss_history.append(train_loss)
+        # train_acc_history.extend(train_acc)
         train_acc_history.append(train_acc)
+        # lr_history.extend(lr)
         lr_history.append(lr)
-
         train_loss_avg = np.mean(train_loss)
         train_acc_avg = np.mean(train_acc) * 100
 
@@ -347,99 +350,111 @@ def learn_models(lrs, optimizers_, num_layers, conv_numbers,
     lr_dict = {opt: lr for opt, lr in zip(optimizers_, lrs)}
     for num_layer in num_layers:
         for conv_number in conv_numbers:
-            hidden_layers = [args.hidden] * num_layer
-            hidden_layers.append(n_class)
-            base_model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
             print(f"num_layer: {num_layer}, conv_number: {conv_number}")
-            train_acc_history_list = []
-            train_loss_history_list = []
-            val_acc_history_list = []
-            val_loss_history_list = []
-            lr_history_list = []
+            for i in range(num_iter):
+                print(f"num_iter: {i}")
+                hidden_layers = [args.hidden] * num_layer
+                hidden_layers.append(n_class)
+                base_model = NN(input_shape, hidden_layers, activation=args.activation, conv_number=conv_number)
+                train_acc_history_list = []
+                train_loss_history_list = []
+                val_acc_history_list = []
+                val_loss_history_list = []
+                lr_history_list = []
 
-            for opt in optimizers_:
-                print(f"Optimizer: {opt}")
-                model = copy.deepcopy(base_model)
-                optimizer = getattr(optimizers, opt)(model.parameters(), lr=lr_dict[opt])
-                (train_acc_history,
-                 train_loss_history, val_acc_history,
-                 val_loss_history,
-                 lr_history) = learn(model,
-                                     dataloader,
-                                     val_dataloader,
-                                     optimizer,
-                                     criterion,
-                                     epochs=args.epochs,
-                                     device=device,
-                                     verbose=verbose,
-                                     with_scheduler=args.scheduler)
-                test_loss, test_acc = validate(model, device, test_dataloader, criterion)
-                if args.save:
-                    torch.save(model.state_dict(),
-                               os.path.join(save_path, f"{num_layer}_{conv_number}_{opt}_{args.scheduler}.pt"))
+                for opt in optimizers_:
+                    print(f"Optimizer: {opt}")
+                    model = copy.deepcopy(base_model)
+                    optimizer = getattr(optimizers, opt)(model.parameters(), lr=lr_dict[opt])
+                    (train_acc_history,
+                     train_loss_history, val_acc_history,
+                     val_loss_history,
+                     lr_history) = learn(model,
+                                         dataloader,
+                                         val_dataloader,
+                                         optimizer,
+                                         criterion,
+                                         epochs=args.epochs,
+                                         device=device,
+                                         verbose=verbose,
+                                         with_scheduler=args.scheduler)
+                    test_loss, test_acc = validate(model, device, test_dataloader, criterion)
 
-                train_acc_history_list.append(train_acc_history)
-                train_loss_history_list.append(train_loss_history)
-                val_acc_history_list.append(val_acc_history)
-                val_loss_history_list.append(val_loss_history)
-                lr_history_list.append(lr_history)
+                    train_acc_history_list.append(train_acc_history)
+                    train_loss_history_list.append(train_loss_history)
+                    val_acc_history_list.append(val_acc_history)
+                    val_loss_history_list.append(val_loss_history)
+                    lr_history_list.append(lr_history)
+                    if args.save:
+                        torch.save(train_acc_history_list, os.path.join(save_path,
+                                                                        f"train_acc_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        torch.save(train_loss_history_list, os.path.join(save_path,
+                                                                         f"train_loss_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        torch.save(val_acc_history_list, os.path.join(save_path,
+                                                                        f"val_acc_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        torch.save(val_loss_history_list, os.path.join(save_path,
+                                                                            f"val_loss_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        torch.save(lr_history_list, os.path.join(save_path,
+                                                                    f"lr_history_lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
+                        torch.save(model.state_dict(),
+                                   os.path.join(save_path, f"lin:{num_layer}_conv:{conv_number}_iter:{i}_opt:{opt}_sch:{args.scheduler}.pt"))
 
-                model.zero_grad()
-                del model
-                del optimizer
-                torch.cuda.empty_cache()
-                gc.collect()
-                if verbose:
-                    print(f"The test accuracy: {test_acc}, the test loss: {test_loss}")
-                    print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
-                    print(f"memory_reserved: {torch.cuda.memory_reserved(device=device) / 1024 ** 3} GB")
+                    model.zero_grad()
+                    del model
+                    del optimizer
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    if verbose:
+                        print(f"The test accuracy: {test_acc}, the test loss: {test_loss}")
+                        print(f"memory_allocated: {torch.cuda.memory_allocated(device=device) / 1024 ** 3} GB")
+                        print(f"memory_reserved: {torch.cuda.memory_reserved(device=device) / 1024 ** 3} GB")
 
-            if args.plot:
-                n_train = len(train_acc_history_list[0])
-                t_train = args.epochs * np.arange(n_train) / n_train
-                t_val = np.arange(1, args.epochs + 1)
+                    if args.plot:
+                        n_train = len(train_acc_history_list[0])
+                        t_train = args.epochs * np.arange(n_train) / n_train
+                        t_val = np.arange(0, args.epochs + 1)
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, train_acc_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Accuracy")
-                plt.savefig(
-                    os.path.join(save_path, f"training_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+                        for i, opt in enumerate(optimizers_):
+                            plt.plot(t_train, train_acc_history_list[i], label=opt)
+                        plt.legend()
+                        plt.xlabel("Epoch")
+                        plt.ylabel("Accuracy")
+                        plt.savefig(
+                            os.path.join(save_path, f"training_curves_{num_layer}_{conv_number}_iter:{i}_{args.scheduler}.png"))
+                        plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, train_loss_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Loss")
-                plt.savefig(
-                    os.path.join(save_path, f"loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+                        for i, opt in enumerate(optimizers_):
+                            plt.plot(t_train, train_loss_history_list[i], label=opt)
+                        plt.legend()
+                        plt.xlabel("Epoch")
+                        plt.ylabel("Loss")
+                        plt.savefig(
+                            os.path.join(save_path, f"loss_curves_{num_layer}_{conv_number}_iter:{i}_{args.scheduler}.png"))
+                        plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, lr_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Learning Rate")
-                plt.savefig(
-                    os.path.join(save_path, f"lr_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+                        for i, opt in enumerate(optimizers_):
+                            plt.plot(t_train, lr_history_list[i], label=opt)
+                        plt.legend()
+                        plt.xlabel("Epoch")
+                        plt.ylabel("Learning Rate")
+                        plt.savefig(
+                            os.path.join(save_path, f"lr_curves_{num_layer}_{conv_number}_iter:{i}_{args.scheduler}.png"))
+                        plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_val, val_acc_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Accuracy")
-                plt.savefig(
-                    os.path.join(save_path, f"val_acc_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+                        for i, opt in enumerate(optimizers_):
+                            plt.plot(t_val, val_acc_history_list[i], label=opt)
+                        plt.legend()
+                        plt.xlabel("Epoch")
+                        plt.ylabel("Accuracy")
+                        plt.savefig(
+                            os.path.join(save_path, f"val_acc_curves_{num_layer}_{conv_number}_iter:{i}_{args.scheduler}.png"))
+                        plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_val, val_loss_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Loss")
-                plt.savefig(
-                    os.path.join(save_path, f"val_loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+                        for i, opt in enumerate(optimizers_):
+                            plt.plot(t_val, val_loss_history_list[i], label=opt)
+                        plt.legend()
+                        plt.xlabel("Epoch")
+                        plt.ylabel("Loss")
+                        plt.savefig(
+                            os.path.join(save_path, f"val_loss_curves_{num_layer}_{conv_number}_iter:{i}_{args.scheduler}.png"))
+                        plt.close()

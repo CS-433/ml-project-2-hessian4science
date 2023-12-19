@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default=2, type=int, help="The number of epochs to train for.")
     parser.add_argument("--plot", action="store_true", help="Whether to plot the training and validation curves.")
     parser.add_argument("--lr", default="0.001,0.001", help="The list of learning rates for the optimizers.")
-    parser.add_argument("--optimizer", default="SCRN,SCRN_Momentum",
+    parser.add_argument("--optimizer", default="SGD,Adam",
                         help="The list of optimizers to use for training.")
     parser.add_argument("--activation", default="relu", help="The activation function to use in the model.")
     parser.add_argument("--save", action="store_true", help="Whether to save the trained model.")
@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="Whether to print detailed training progress.")
     parser.add_argument("--scheduler", action="store_true", help="Whether to use a learning rate scheduler.")
     parser.add_argument("--model_selection", action="store_true", help="Whether to perform model_selection.")
+    parser.add_argument("--num_iter", default=5, type=int, help="The number of different models to train.")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -113,4 +114,5 @@ if __name__ == "__main__":
                      dataloader, val_dataloader,
                      test_dataloader, input_shape,
                      n_class, device=device,
-                     args=args, verbose=args.verbose)
+                     args=args, verbose=args.verbose,
+                     num_iter=args.num_iter)
