@@ -271,59 +271,59 @@ def model_selection(lrs, optimizers_, num_layers, conv_numbers,
                 val_loss_history_list.append(best_val_loss_history)
                 lr_history_list.append(best_lr_history)
 
-            if args.plot:
-                n_train = len(train_acc_history_list[0])
-                t_train = args.epochs * np.arange(n_train) / n_train
-                t_val = np.arange(1, args.epochs + 1)
-                min_loss = min([min(loss) for loss in val_loss_history_list]+[min(loss) for loss in train_loss_history_list])
-                max_loss = max([max(loss) for loss in val_loss_history_list]+[max(loss) for loss in train_loss_history_list])
+            # if args.plot:
+            #     n_train = len(train_acc_history_list[0])
+            #     t_train = args.epochs * np.arange(n_train) / n_train
+            #     t_val = np.arange(1, args.epochs + 1)
+            #     min_loss = min([min(loss) for loss in val_loss_history_list]+[min(loss) for loss in train_loss_history_list])
+            #     max_loss = max([max(loss) for loss in val_loss_history_list]+[max(loss) for loss in train_loss_history_list])
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, train_acc_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Accuracy")
-                plt.savefig(
-                    os.path.join(save_path, f"training_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+            #     for i, opt in enumerate(optimizers_):
+            #         plt.plot(t_train, train_acc_history_list[i], label=opt)
+            #     plt.legend()
+            #     plt.xlabel("Epoch")
+            #     plt.ylabel("Accuracy")
+            #     plt.savefig(
+            #         os.path.join(save_path, f"training_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
+            #     plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, train_loss_history_list[i], label=opt)
-                plt.legend()
-                plt.ylim(min_loss, max_loss)
-                plt.xlabel("Epoch")
-                plt.ylabel("Loss")
-                plt.savefig(
-                    os.path.join(save_path, f"loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+            #     for i, opt in enumerate(optimizers_):
+            #         plt.plot(t_train, train_loss_history_list[i], label=opt)
+            #     plt.legend()
+            #     plt.ylim(min_loss, max_loss)
+            #     plt.xlabel("Epoch")
+            #     plt.ylabel("Loss")
+            #     plt.savefig(
+            #         os.path.join(save_path, f"loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
+            #     plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_train, lr_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Learning Rate")
-                plt.savefig(
-                    os.path.join(save_path, f"lr_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+            #     for i, opt in enumerate(optimizers_):
+            #         plt.plot(t_train, lr_history_list[i], label=opt)
+            #     plt.legend()
+            #     plt.xlabel("Epoch")
+            #     plt.ylabel("Learning Rate")
+            #     plt.savefig(
+            #         os.path.join(save_path, f"lr_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
+            #     plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_val, val_acc_history_list[i], label=opt)
-                plt.legend()
-                plt.xlabel("Epoch")
-                plt.ylabel("Accuracy")
-                plt.savefig(
-                    os.path.join(save_path, f"val_acc_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+            #     for i, opt in enumerate(optimizers_):
+            #         plt.plot(t_val, val_acc_history_list[i], label=opt)
+            #     plt.legend()
+            #     plt.xlabel("Epoch")
+            #     plt.ylabel("Accuracy")
+            #     plt.savefig(
+            #         os.path.join(save_path, f"val_acc_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
+            #     plt.close()
 
-                for i, opt in enumerate(optimizers_):
-                    plt.plot(t_val, val_loss_history_list[i], label=opt)
-                plt.legend()
-                plt.ylim(min_loss, max_loss)
-                plt.xlabel("Epoch")
-                plt.ylabel("Loss")
-                plt.savefig(
-                    os.path.join(save_path, f"val_loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
-                plt.close()
+            #     for i, opt in enumerate(optimizers_):
+            #         plt.plot(t_val, val_loss_history_list[i], label=opt)
+            #     plt.legend()
+            #     plt.ylim(min_loss, max_loss)
+            #     plt.xlabel("Epoch")
+            #     plt.ylabel("Loss")
+            #     plt.savefig(
+            #         os.path.join(save_path, f"val_loss_curves_{num_layer}_{conv_number}_{args.scheduler}.png"))
+            #     plt.close()
 
 
 def learn_models(lrs, optimizers_, num_layers, conv_numbers,

@@ -45,18 +45,15 @@ conda  activate <env>
 - `save`: save the model, default False.
 - `save_path`: path to save the model, default `./models/`.
 - `model_selection`: for grid search on learning rate on the optimizers required.
-- `plot`: plot the loss and accuracy, default False.
 
 ### Examples
 
 # run one optimizer over one learning rate
 
-```bash
-python main.py --dataset MNIST --num_layers 3 --conv_number 3 --epochs 50 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --save
-```
+- Run Neural network of 3 convolutaional layer, 3 fully connected layers, over 50 epochs over MNIST dataset, over Adam SGD, SCRN and SCRN_Momentum optimizer with learning rate 0.001, 0.1, 0.001 and 0.001 respectively, verbose and save the model.
 
 ```bash
-python main.py --dataset CIFAR10 --optimizer Adam --epochs 10 --batch_size 100 --lr 0.001 --save True --save_path ./models/
+python main.py --dataset MNIST --num_layers 3 --conv_number 3 --epochs 50 --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --save
 ```
 
 ## Datsets
