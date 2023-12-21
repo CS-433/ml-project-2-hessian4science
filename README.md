@@ -52,7 +52,7 @@ conda  activate <env>
 # run one optimizer over one learning rate
 
 ```bash
-python main.py --dataset MNIST --optimizer SGD --epochs 10 --batch_size 100 --lr 0.001 --save True --save_path ./models/
+python main.py --dataset MNIST --num_layers 3 --conv_number 3 --epochs 50 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --save
 ```
 
 ```bash
