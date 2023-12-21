@@ -1,3 +1,4 @@
 .DS_Store
 analyze_data.ipynb
 *__pycache__/
+NLP/
