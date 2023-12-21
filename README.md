@@ -38,16 +38,26 @@ conda  activate <env>
 - `epochs`: number of epochs to run the training defautl 2.
 - `batch_size`: batch size, default 100.
 - `lr`: learning rate, default 0.001.
-- `optimizer`: optimizer to use, SGD, Adam, Sophia, SCRN or SCRN_Momentum. Here you can give more than one in the following format:
-  ```bash
-  "SGD, Adam
-  ```
+- `optimizer`: optimizer to use, SGD, Adam, Sophia, SCRN or SCRN_Momentum. can be one or a list
 - `activation`: activation function, default relu.
 - `scheduler`: set a scheduler for the learning rate.
 - `verbose`: Whether to print detailed training progress.
 - `save`: save the model, default False.
 - `save_path`: path to save the model, default `./models/`.
 - `model_selection`: for grid search on learning rate on the optimizers required.
+- `plot`: plot the loss and accuracy, default False.
+
+### Examples
+
+# run one optimizer over one learning rate
+
+```bash
+python main.py --dataset MNIST --optimizer SGD --epochs 10 --batch_size 100 --lr 0.001 --save True --save_path ./models/
+```
+
+```bash
+python main.py --dataset CIFAR10 --optimizer Adam --epochs 10 --batch_size 100 --lr 0.001 --save True --save_path ./models/
+```
 
 ## Datsets
 
