@@ -39,7 +39,7 @@ def create_new_dataset(dataset, optimizer):
     data_grouped_0 = data_grouped.get_group((0))
     new_df = get_mean_std(data_grouped_0, 0)
 
-    for i in range(1, 30):
+    for i in range(1, 31):
         grouped = data_grouped.get_group((i))
         new_df = pd.concat([new_df, get_mean_std(grouped, i)])
 
