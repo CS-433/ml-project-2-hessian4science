@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-#SBATCH --job-name=CIFAR100_final
-#SBATCH --output=CIFAR100_final.txt
+#SBATCH --job-name=MNIST_final
+#SBATCH --output=MNIST_final.txt
 #
 #number of CPUs to be used
 #SBATCH --ntasks=1
@@ -49,11 +49,11 @@ source $HOME/Jupyter/venv/bin/activate
 cd $HOME/Jupyter/ml-project-2-hessian4science
 
 
-#python main.py --dataset MNIST --num_layers 3 --conv_number 3 --epochs 30 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --save
+python main.py --dataset MNIST --num_layers 3 --conv_number 3 --epochs 50 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --save
 
 
-#python main.py --dataset CIFAR10 --num_layers 3 --conv_number 3 --epochs 30 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --verbose --save
+#python main.py --dataset CIFAR10 --num_layers 3 --conv_number 3 --epochs 50 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --verbose --save
 
 
-python main.py --dataset CIFAR100 --num_layers 3 --conv_number 3 --epochs 30 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --verbose --save
+#python main.py --dataset CIFAR100 --num_layers 3 --conv_number 3 --epochs 50 --plot --lr 0.001,0.1,0.001,0.001 --optimizer Adam,SGD,SCRN,SCRN_Momentum --verbose --verbose --save
 
