@@ -8,8 +8,8 @@ Optimizer implemented in this repository:
 
 - SGD
 - Adam
-- Stocastic Cubic Regularization (SCRN)
-- Stocastic Cubic Regularization with Momentum (SCRN_Momentum)
+- Stochastic Cubic Regularization (SCRN)
+- Stochastic Cubic Regularization with Momentum (SCRN_Momentum)
 
 Files in this repository:
 
