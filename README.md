@@ -1,4 +1,4 @@
-# Sthocastic Non-convex Optimization
+# Stochastic Non-convex Optimization
 
 This is the repository of the Machine learning course project, working with the
 
